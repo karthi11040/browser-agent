@@ -24,6 +24,12 @@ import {
   ExternalLink,
   Wand2,
   RefreshCw,
+  MousePointer2,
+  Keyboard,
+  Hand,
+  MonitorPlay,
+  ShieldAlert,
+  Camera,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -47,12 +53,25 @@ interface AgentSource {
 
 interface AgentStep {
   id: string
-  action: 'plan' | 'search' | 'read' | 'think' | 'compose'
+  action:
+    | 'plan'
+    | 'search'
+    | 'read'
+    | 'think'
+    | 'compose'
+    | 'navigate'
+    | 'click'
+    | 'type'
+    | 'press'
+    | 'extract'
+    | 'reflect'
   intent: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   detail?: string
   output?: string
   sources?: AgentSource[]
+  screenshotPath?: string
+  pageUrl?: string
   startedAt?: number
   endedAt?: number
 }
@@ -64,6 +83,7 @@ interface AgentEvent {
     | 'step_progress'
     | 'step_complete'
     | 'step_error'
+    | 'screenshot'
     | 'final'
     | 'done'
     | 'error'
@@ -75,6 +95,8 @@ interface AgentEvent {
   message?: string
   content?: string
   sources?: AgentSource[]
+  webPath?: string
+  pageUrl?: string
   error?: string
 }
 
@@ -83,6 +105,7 @@ const MODES: { key: AgentMode; label: string; desc: string; icon: any }[] = [
   { key: 'research', label: 'Research', desc: 'Web-heavy, cited', icon: Globe },
   { key: 'code', label: 'Code', desc: 'Reasoning, code-blocks', icon: Terminal },
   { key: 'summarize', label: 'Summarize', desc: 'Distill long input', icon: FileText },
+  { key: 'browser', label: 'Browser', desc: 'Drives real Chrome', icon: MonitorPlay },
 ]
 
 const SAMPLE_PROMPTS = [
@@ -90,6 +113,13 @@ const SAMPLE_PROMPTS = [
   'Find the current price of Bitcoin and explain 3 factors driving it this week.',
   'Summarize https://en.wikipedia.org/wiki/Reinforcement_learning in 5 bullet points.',
   'Write a Python script that scrapes the titles of the top 10 HN stories.',
+]
+
+const BROWSER_SAMPLE_PROMPTS = [
+  'Go to https://news.ycombinator.com and list the top 5 story titles.',
+  'Search Wikipedia for "large language model" and return the first paragraph.',
+  'Visit https://httpbin.org/forms/post and fill the form with sample data, then submit it.',
+  'Open https://example.com and tell me what the page is about in 2 sentences.',
 ]
 
 // ---------------------------------------------------------------------------
@@ -108,6 +138,18 @@ const stepIcon = (action: AgentStep['action']) => {
       return Brain
     case 'compose':
       return Wand2
+    case 'navigate':
+      return Globe
+    case 'click':
+      return MousePointer2
+    case 'type':
+      return Keyboard
+    case 'press':
+      return Hand
+    case 'extract':
+      return FileText
+    case 'reflect':
+      return Brain
     default:
       return Sparkles
   }
@@ -129,6 +171,11 @@ export default function Home() {
   const [sources, setSources] = useState<AgentSource[]>([])
   const [error, setError] = useState<string | null>(null)
   const [runId, setRunId] = useState<string | null>(null)
+  const [liveScreenshot, setLiveScreenshot] = useState<{
+    webPath: string
+    pageUrl?: string
+    stepId?: string
+  } | null>(null)
 
   // History sidebar
   const [history, setHistory] = useState<
@@ -169,6 +216,7 @@ export default function Home() {
     setSources([])
     setError(null)
     setRunId(null)
+    setLiveScreenshot(null)
   }, [])
 
   // ----- Run the agent -----
@@ -264,6 +312,28 @@ export default function Home() {
           )
         }
         break
+      case 'screenshot':
+        if (ev.webPath) {
+          setLiveScreenshot({
+            webPath: ev.webPath,
+            pageUrl: ev.pageUrl,
+            stepId: ev.stepId,
+          })
+          if (ev.stepId) {
+            setSteps((s) =>
+              s.map((st) =>
+                st.id === ev.stepId
+                  ? {
+                      ...st,
+                      screenshotPath: ev.webPath,
+                      pageUrl: ev.pageUrl,
+                    }
+                  : st
+              )
+            )
+          }
+        }
+        break
       case 'final':
         if (ev.content) setFinalContent(ev.content)
         if (ev.sources) setSources(ev.sources)
@@ -290,10 +360,23 @@ export default function Home() {
       resetForNewRun()
       setPrompt(run.prompt)
       setMode(run.mode as AgentMode)
-      setSteps(run.steps ?? [])
+      const restoredSteps: AgentStep[] = run.steps ?? []
+      setSteps(restoredSteps)
       setFinalContent(run.result ?? '')
       setSources(run.sources ?? [])
       setRunId(run.id)
+      // Restore the latest screenshot for the live preview
+      const lastShot = restoredSteps
+        .slice()
+        .reverse()
+        .find((s: AgentStep) => s.screenshotPath)
+      if (lastShot) {
+        setLiveScreenshot({
+          webPath: lastShot.screenshotPath!,
+          pageUrl: lastShot.pageUrl,
+          stepId: lastShot.id,
+        })
+      }
       if (run.status === 'failed') setError(run.error ?? 'Run failed')
       setHistoryOpenMobile(false)
     } catch {
@@ -523,18 +606,62 @@ export default function Home() {
             {!hasSteps && !hasResult && (
               <div className="mt-4">
                 <div className="text-xs text-muted-foreground mb-2">
-                  Try a sample prompt:
+                  {mode === 'browser'
+                    ? 'Try a browser-mode prompt (drives a real headless Chrome):'
+                    : 'Try a sample prompt:'}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {SAMPLE_PROMPTS.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPrompt(p)}
-                      className="text-left text-xs px-3 py-2 rounded-md border border-border hover:bg-accent/50 hover:border-foreground/20 text-muted-foreground hover:text-foreground transition-colors max-w-[300px] truncate"
-                    >
-                      {p}
-                    </button>
-                  ))}
+                  {(mode === 'browser' ? BROWSER_SAMPLE_PROMPTS : SAMPLE_PROMPTS).map(
+                    (p) => (
+                      <button
+                        key={p}
+                        onClick={() => setPrompt(p)}
+                        className="text-left text-xs px-3 py-2 rounded-md border border-border hover:bg-accent/50 hover:border-foreground/20 text-muted-foreground hover:text-foreground transition-colors max-w-[300px] truncate"
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Browser-mode disclaimer */}
+            {mode === 'browser' && !hasSteps && !hasResult && (
+              <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1.5 text-muted-foreground">
+                    <div className="font-medium text-amber-600 dark:text-amber-500">
+                      What Browser mode can & can't do
+                    </div>
+                    <p>
+                      <strong className="text-foreground">Can:</strong> drive a
+                      real headless Chrome to navigate, click, type, and extract
+                      text on <em>public</em> sites — with a live screenshot at
+                      every step.
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Won't auto-login</strong>{' '}
+                      to Facebook, Instagram, Gmail, Twitter/X, or any other
+                      gated service — automating those logins violates their
+                      Terms of Service and would put your credentials at risk.
+                      If you paste a URL that requires login, the agent will
+                      hit the login wall and explain what happened.
+                    </p>
+                    <p>
+                      <strong className="text-foreground">Won't complete</strong>{' '}
+                      real-world commerce (ticket booking, payments, bulk email)
+                      end-to-end — it can demonstrate the search + form-fill
+                      flow up to the payment step, but the final submission is
+                      yours to confirm.
+                    </p>
+                    <p className="text-[11px] opacity-80">
+                      Tip: the agent runs headless (no visible browser window).
+                      Watch the Live Browser Preview panel below to see exactly
+                      what it sees.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
@@ -593,9 +720,15 @@ export default function Home() {
             </Card>
           )}
 
-          {/* Two-column: steps + result */}
+          {/* Two-column: steps + (live browser preview OR result) */}
           {(hasSteps || hasResult || running) && (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <div
+              className={
+                mode === 'browser'
+                  ? 'grid grid-cols-1 xl:grid-cols-3 gap-5'
+                  : 'grid grid-cols-1 xl:grid-cols-2 gap-5'
+              }
+            >
               {/* Steps timeline */}
               <Card className="p-4 md:p-5 bg-card/80 backdrop-blur">
                 <div className="flex items-center justify-between mb-3">
@@ -676,6 +809,34 @@ export default function Home() {
                                 {step.detail}
                               </div>
                             )}
+                            {step.pageUrl && (
+                              <a
+                                href={step.pageUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 mt-2 text-[10px] px-1.5 py-0.5 rounded agent-accent-bg border border-[var(--agent-accent)]/20 max-w-full truncate hover:brightness-110"
+                                title={step.pageUrl}
+                              >
+                                <Globe className="w-2.5 h-2.5 shrink-0" />
+                                <span className="truncate">{step.pageUrl}</span>
+                              </a>
+                            )}
+                            {step.screenshotPath && (
+                              <a
+                                href={step.screenshotPath}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 block rounded overflow-hidden border border-border hover:border-foreground/30 transition-colors"
+                                title="View full-size screenshot"
+                              >
+                                <img
+                                  src={step.screenshotPath}
+                                  alt={`Screenshot after step ${idx + 1}`}
+                                  className="w-full h-auto block"
+                                  loading="lazy"
+                                />
+                              </a>
+                            )}
                             {step.output && (
                               <details className="mt-2">
                                 <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
@@ -717,10 +878,82 @@ export default function Home() {
                 </div>
               </Card>
 
+              {/* Live Browser Preview (browser mode only) */}
+              {mode === 'browser' && (
+                <Card className="p-4 md:p-5 bg-card/80 backdrop-blur border-[var(--agent-accent)]/20 flex flex-col">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <MonitorPlay className="w-4 h-4 agent-accent" />
+                      <h3 className="font-medium text-sm">
+                        Live browser preview
+                      </h3>
+                    </div>
+                    {running && (
+                      <Badge
+                        variant="outline"
+                        className="agent-running border-[var(--agent-running)]/40"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--agent-running)] agent-pulse mr-1" />
+                        Live
+                      </Badge>
+                    )}
+                  </div>
+
+                  {liveScreenshot ? (
+                    <div className="space-y-2">
+                      <div className="rounded-md overflow-hidden border bg-black/30">
+                        <img
+                          src={liveScreenshot.webPath}
+                          alt="Latest browser screenshot"
+                          className="w-full h-auto block"
+                        />
+                      </div>
+                      {liveScreenshot.pageUrl && (
+                        <a
+                          href={liveScreenshot.pageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground max-w-full truncate"
+                          title={liveScreenshot.pageUrl}
+                        >
+                          <Globe className="w-3 h-3 shrink-0" />
+                          <span className="truncate">
+                            {liveScreenshot.pageUrl}
+                          </span>
+                        </a>
+                      )}
+                      <div className="text-[11px] text-muted-foreground">
+                        {running
+                          ? 'Agent is driving the page — screenshot updates after each action.'
+                          : 'Final screenshot from the agent run.'}
+                      </div>
+                    </div>
+                  ) : running ? (
+                    <div className="aspect-[4/3] rounded-md border border-dashed flex items-center justify-center text-xs text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="w-5 h-5 animate-spin agent-running" />
+                        Launching headless Chrome…
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="aspect-[4/3] rounded-md border border-dashed flex items-center justify-center text-xs text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <Camera className="w-5 h-5" />
+                        Screenshots will appear here as the agent acts.
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              )}
+
               {/* Result */}
               <Card
                 ref={resultRef}
-                className="p-4 md:p-5 bg-card/80 backdrop-blur"
+                className={
+                  mode === 'browser'
+                    ? 'xl:col-span-1 p-4 md:p-5 bg-card/80 backdrop-blur'
+                    : 'p-4 md:p-5 bg-card/80 backdrop-blur'
+                }
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">

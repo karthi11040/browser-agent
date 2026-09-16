@@ -1,10 +1,26 @@
 import { getZAI } from './zai'
+import {
+  createBrowserSession,
+  navigate as browserNavigate,
+  snapshotInteractive,
+  snapshotText,
+  screenshot as browserScreenshot,
+  clickByRef,
+  clickByText,
+  clickByRole,
+  typeIntoField,
+  pressKey,
+  waitMs,
+  getUrl,
+  closeSession,
+  type BrowserSession,
+} from './browser-client'
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type AgentMode = 'general' | 'research' | 'code' | 'summarize'
+export type AgentMode = 'general' | 'research' | 'code' | 'summarize' | 'browser'
 
 export interface AgentSource {
   title: string
@@ -14,12 +30,25 @@ export interface AgentSource {
 
 export interface AgentStep {
   id: string
-  action: 'plan' | 'search' | 'read' | 'think' | 'compose'
+  action:
+    | 'plan'
+    | 'search'
+    | 'read'
+    | 'think'
+    | 'compose'
+    | 'navigate'
+    | 'click'
+    | 'type'
+    | 'press'
+    | 'extract'
+    | 'reflect'
   intent: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   detail?: string
   output?: string
   sources?: AgentSource[]
+  screenshotPath?: string
+  pageUrl?: string
   startedAt?: number
   endedAt?: number
 }
@@ -29,6 +58,7 @@ export type AgentEvent =
   | { type: 'step_progress'; stepId: string; message: string }
   | { type: 'step_complete'; stepId: string; step: AgentStep }
   | { type: 'step_error'; stepId: string; error: string }
+  | { type: 'screenshot'; stepId: string; webPath: string; pageUrl?: string }
   | { type: 'final'; content: string; sources: AgentSource[] }
   | { type: 'done'; runId: string }
   | { type: 'error'; error: string }
@@ -57,6 +87,11 @@ const MODE_PRESETS: Record<AgentMode, { label: string; preamble: string }> = {
     label: 'Summarize',
     preamble:
       'You are a summarization agent. If the user provides a URL, read it first. If they provide long text, reason over it. Produce a structured markdown summary with headings, key points, and a takeaway.',
+  },
+  browser: {
+    label: 'Browser',
+    preamble:
+      'You are an autonomous browser agent. You drive a real headless Chrome via the available actions (navigate, click, type, press, extract). After each action you receive an updated snapshot of interactive elements. Decide your next action step-by-step until the task is done, then call done with the final markdown answer.',
   },
 }
 
@@ -352,6 +387,382 @@ export async function composeFinal({
 }
 
 // ============================================================================
+// Browser-mode orchestrator — interactive LLM loop with real Chrome
+// ============================================================================
+
+const BROWSER_AGENT_SYSTEM = `You are an autonomous browser agent driving a real headless Chrome browser.
+
+You receive the user's task and the CURRENT page state (URL, title, and a list of interactive elements with refs like @e1, @e2). You must decide ONE next action.
+
+Available actions (return strict JSON only, no prose, no code fence):
+- { "action": "navigate", "url": "<absolute URL>" }
+- { "action": "click",   "ref": "@e1" }                          // by ref from current snapshot
+- { "action": "click_text", "text": "<visible text>" }           // click by visible text
+- { "action": "click_role", "role": "<role>", "name": "<name>" } // e.g. role=button name="Search"
+- { "action": "type",    "ref": "@e1", "text": "<text>" }
+- { "action": "press",   "key": "Enter" }                        // or "Tab","Escape","Control+a", etc.
+- { "action": "extract", "why": "<why you want to read this page>" } // returns visible text
+- { "action": "wait",    "ms": 1500 }                            // wait for page to settle
+- { "action": "done",    "answer": "<final markdown answer>" }   // task complete
+
+Rules:
+- ALWAYS return exactly ONE action object as JSON.
+- If you don't know what's on the page yet, the FIRST action should be "navigate" to a sensible URL.
+- Only use "done" when the user's task is fully completed.
+- Stay within 12 actions max. Prefer fewer steps.
+- Never attempt login to social media / email providers (Facebook, Instagram, Gmail, Twitter/X, etc.) — refuse those tasks politely with a "done" action explaining the limitation.
+- For real-world commerce (booking, payment) demonstrate the flow but stop before the final payment step.
+- Match the user's language for the final answer.`
+
+interface BrowserAction {
+  action:
+    | 'navigate'
+    | 'click'
+    | 'click_text'
+    | 'click_role'
+    | 'type'
+    | 'press'
+    | 'extract'
+    | 'wait'
+    | 'done'
+  url?: string
+  ref?: string
+  text?: string
+  role?: string
+  name?: string
+  key?: string
+  why?: string
+  ms?: number
+  answer?: string
+}
+
+function snapshotToBrief(snap: any): {
+  url: string
+  title: string
+  elements: string[]
+  snapshotText: string
+} {
+  // agent-browser --json returns:
+  // { success, data: { origin, refs: { e1: { role, name }, ... }, snapshot: "<text>" } }
+  const data = snap?.data ?? {}
+  const refs = data.refs ?? {}
+  const elements: string[] = []
+  for (const [refId, info] of Object.entries(refs)) {
+    const role = (info as any)?.role ?? 'element'
+    const name = ((info as any)?.name ?? '').toString().slice(0, 80)
+    elements.push(`@${refId} ${role}${name ? ` "${name}"` : ''}`)
+  }
+  return {
+    url: typeof data.origin === 'string' ? data.origin : '',
+    title: '',
+    elements: elements.slice(0, 50),
+    snapshotText: typeof data.snapshot === 'string' ? data.snapshot : '',
+  }
+}
+
+async function decideBrowserAction(
+  userPrompt: string,
+  history: string,
+  pageBrief: {
+    url: string
+    title: string
+    elements: string[]
+    snapshotText: string
+  },
+  extractedText?: string
+): Promise<BrowserAction> {
+  const zai = await getZAI()
+  const pageBlock = `CURRENT PAGE
+URL: ${pageBrief.url || '(about:blank)'}
+Title: ${pageBrief.title || '(none)'}
+Interactive elements (use these refs in click/type actions):
+${pageBrief.elements.length > 0 ? pageBrief.elements.join('\n') : '(none captured)'}
+
+Full accessibility tree (for context):
+${pageBrief.snapshotText ? truncate(pageBrief.snapshotText, 2000) : '(empty)'}`
+
+  const extractedBlock = extractedText
+    ? `\n\nVISIBLE TEXT (truncated):\n${truncate(extractedText, 4000)}`
+    : ''
+
+  const completion = await zai.chat.completions.create({
+    messages: [
+      { role: 'system', content: BROWSER_AGENT_SYSTEM },
+      { role: 'system', content: `Mode guidance: ${MODE_PRESETS.browser.preamble}` },
+      {
+        role: 'user',
+        content: `USER TASK:\n"""\n${userPrompt}\n"""\n\nACTIONS TAKEN SO FAR:\n${history || '(none — this is the first action)'}\n\n${pageBlock}${extractedBlock}\n\nDecide your next action. Return JSON only.`,
+      },
+    ],
+    temperature: 0.2,
+  })
+
+  const raw: string =
+    completion?.choices?.[0]?.message?.content ??
+    completion?.message?.content ??
+    ''
+
+  const jsonMatch = raw.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    return { action: 'done', answer: `(agent could not parse its next action; raw: ${raw.slice(0, 200)})` }
+  }
+  try {
+    return JSON.parse(jsonMatch[0]) as BrowserAction
+  } catch {
+    return { action: 'done', answer: `(agent returned malformed action; raw: ${raw.slice(0, 200)})` }
+  }
+}
+
+async function* runBrowserAgent(
+  userPrompt: string,
+  steps: AgentStep[],
+  sources: AgentSource[],
+  stepOutputs: string[]
+): AsyncGenerator<AgentEvent> {
+  const runId = `br-${Date.now()}`
+  let session: BrowserSession
+  try {
+    session = createBrowserSession(runId)
+  } catch (err: any) {
+    yield { type: 'error', error: `Browser session init failed: ${err?.message ?? err}` }
+    return
+  }
+
+  const MAX_ACTIONS = 12
+  let history = ''
+  let finalContent = ''
+
+  for (let i = 0; i < MAX_ACTIONS; i += 1) {
+    // Get current page state
+    let pageBrief: {
+      url: string
+      title: string
+      elements: string[]
+      snapshotText: string
+    } = {
+      url: '',
+      title: '',
+      elements: [],
+      snapshotText: '',
+    }
+    let extractedText: string | undefined
+    if (i > 0) {
+      const snap = snapshotInteractive(session)
+      if (snap.ok && snap.snapshot) {
+        pageBrief = snapshotToBrief(snap.snapshot)
+      }
+    }
+
+    // Ask LLM for next action
+    const decideStep: AgentStep = {
+      id: nextId(),
+      action: 'reflect',
+      intent: `Decide action #${i + 1}`,
+      status: 'running',
+      startedAt: Date.now(),
+    }
+    steps.push(decideStep)
+    yield { type: 'step_start', step: decideStep }
+    yield { type: 'step_progress', stepId: decideStep.id, message: 'Deciding next action…' }
+
+    let action: BrowserAction
+    try {
+      action = await decideBrowserAction(userPrompt, history, pageBrief, extractedText)
+    } catch (err: any) {
+      decideStep.status = 'failed'
+      decideStep.endedAt = Date.now()
+      decideStep.detail = err?.message ?? 'decide failed'
+      yield { type: 'step_error', stepId: decideStep.id, error: decideStep.detail }
+      yield { type: 'error', error: decideStep.detail }
+      try { closeSession(session) } catch {}
+      return
+    }
+
+    decideStep.status = 'completed'
+    decideStep.endedAt = Date.now()
+    decideStep.output = JSON.stringify(action)
+    decideStep.detail = `Action: ${action.action}`
+    yield { type: 'step_complete', stepId: decideStep.id, step: decideStep }
+
+    // If done — compose final
+    if (action.action === 'done') {
+      finalContent = action.answer ?? '(no answer provided)'
+      history += `\n${i + 1}. DONE — final answer delivered`
+      break
+    }
+
+    // Execute the action as a step
+    const step: AgentStep = {
+      id: nextId(),
+      action: action.action as any,
+      intent: describeAction(action),
+      status: 'running',
+      startedAt: Date.now(),
+    }
+    steps.push(step)
+    yield { type: 'step_start', step }
+    yield { type: 'step_progress', stepId: step.id, message: `${action.action}…` }
+
+    let output = ''
+    let failed = false
+    let errorMsg = ''
+    try {
+      switch (action.action) {
+        case 'navigate': {
+          const target = action.url ?? ''
+          if (!target) throw new Error('navigate requires url')
+          const r = browserNavigate(session, target)
+          output = `Navigated to ${target}`
+          if (!r.ok) {
+            failed = true
+            errorMsg = r.stderr || 'navigate failed'
+          }
+          break
+        }
+        case 'click': {
+          if (!action.ref) throw new Error('click requires ref')
+          const r = clickByRef(session, action.ref)
+          output = `Clicked ${action.ref}`
+          if (!r.ok) { failed = true; errorMsg = r.stderr || 'click failed' }
+          break
+        }
+        case 'click_text': {
+          if (!action.text) throw new Error('click_text requires text')
+          const r = clickByText(session, action.text)
+          output = `Clicked element with text "${action.text}"`
+          if (!r.ok) { failed = true; errorMsg = r.stderr || 'click_text failed' }
+          break
+        }
+        case 'click_role': {
+          if (!action.role || !action.name) throw new Error('click_role requires role + name')
+          const r = clickByRole(session, action.role, action.name)
+          output = `Clicked ${action.role} "${action.name}"`
+          if (!r.ok) { failed = true; errorMsg = r.stderr || 'click_role failed' }
+          break
+        }
+        case 'type': {
+          if (!action.ref || action.text === undefined) throw new Error('type requires ref + text')
+          const r = typeIntoField(session, action.ref, action.text)
+          output = `Typed "${action.text}" into ${action.ref}`
+          if (!r.ok) { failed = true; errorMsg = r.stderr || 'type failed' }
+          break
+        }
+        case 'press': {
+          if (!action.key) throw new Error('press requires key')
+          const r = pressKey(session, action.key)
+          output = `Pressed ${action.key}`
+          if (!r.ok) { failed = true; errorMsg = r.stderr || 'press failed' }
+          break
+        }
+        case 'extract': {
+          const r = snapshotText(session)
+          output = truncate(r.text || '', 6000)
+          extractedText = r.text
+          if (!r.ok) { failed = true; errorMsg = r.stderr || 'extract failed' }
+          break
+        }
+        case 'wait': {
+          const ms = Number(action.ms) || 1500
+          waitMs(session, ms)
+          output = `Waited ${ms}ms`
+          break
+        }
+        default:
+          throw new Error(`Unknown action: ${(action as any).action}`)
+      }
+    } catch (err: any) {
+      failed = true
+      errorMsg = err?.message ?? 'action failed'
+      output = errorMsg
+    }
+
+    // Take a screenshot after the action (or attempt)
+    let screenshotPath: string | undefined
+    let pageUrl: string | undefined
+    try {
+      const ss = browserScreenshot(session, steps.length)
+      if (ss.ok && ss.webPath) {
+        screenshotPath = ss.webPath
+        step.screenshotPath = screenshotPath
+        const urlInfo = getUrl(session)
+        if (urlInfo.ok && urlInfo.url) {
+          pageUrl = urlInfo.url
+          step.pageUrl = pageUrl
+        }
+        yield {
+          type: 'screenshot',
+          stepId: step.id,
+          webPath: screenshotPath,
+          pageUrl,
+        }
+      }
+    } catch {
+      /* ignore screenshot failures */
+    }
+
+    // Mark sources for navigate/extract
+    if (action.action === 'navigate' && action.url) {
+      const src: AgentSource = { title: action.url, url: action.url }
+      if (!sources.some((x) => x.url === src.url)) sources.push(src)
+      step.sources = [src]
+    }
+
+    step.status = failed ? 'failed' : 'completed'
+    step.endedAt = Date.now()
+    step.output = output
+    if (failed) step.detail = errorMsg
+
+    history += `\n${i + 1}. ${output}${failed ? ` (FAILED: ${errorMsg})` : ''}`
+    stepOutputs.push(`### ${action.action.toUpperCase()}: ${step.intent}\n${output}`)
+
+    if (failed) {
+      yield { type: 'step_error', stepId: step.id, error: errorMsg }
+    } else {
+      yield { type: 'step_complete', stepId: step.id, step }
+    }
+
+    // If too many consecutive failures, bail out
+    if (failed) {
+      const recentFail = steps.slice(-3).filter((s) => s.status === 'failed').length
+      if (recentFail >= 3) {
+        finalContent = `(agent stopped: 3 consecutive action failures)\n\nLast history:\n${history}`
+        break
+      }
+    }
+  }
+
+  // Close the browser session
+  try {
+    closeSession(session)
+  } catch {}
+
+  // Emit final
+  if (!finalContent) {
+    finalContent = `(agent reached the action limit of ${MAX_ACTIONS} without calling done)\n\nHistory:\n${history}`
+  }
+
+  yield { type: 'final', content: finalContent, sources }
+
+  // Clean up screenshots directory after a short delay (so the UI can show them)
+  // Actually, leave them — they're persisted with the run via stepsJson
+}
+
+function describeAction(a: BrowserAction): string {
+  switch (a.action) {
+    case 'navigate': return `Navigate to ${a.url}`
+    case 'click': return `Click ${a.ref}`
+    case 'click_text': return `Click "${a.text}"`
+    case 'click_role': return `Click ${a.role} "${a.name}"`
+    case 'type': return `Type into ${a.ref}`
+    case 'press': return `Press ${a.key}`
+    case 'extract': return a.why ? `Extract page text (${a.why})` : 'Extract page text'
+    case 'wait': return `Wait ${a.ms ?? 1500}ms`
+    case 'done': return 'Done — deliver final answer'
+    default: return 'Action'
+  }
+}
+
+// ============================================================================
 // Orchestrator — yields events as the agent runs
 // ============================================================================
 
@@ -363,7 +774,15 @@ export async function* runAgent(
   const sources: AgentSource[] = []
   const stepOutputs: string[] = []
 
-  // ---- Plan step ----
+  // ---- Browser mode: interactive LLM loop with real Chrome ----
+  if (mode === 'browser') {
+    yield* runBrowserAgent(userPrompt, steps, sources, stepOutputs)
+    ;(runAgent as any).__lastSteps = steps
+    ;(runAgent as any).__lastSources = sources
+    return
+  }
+
+  // ---- Plan step (other modes) ----
   const planStep: AgentStep = {
     id: nextId(),
     action: 'plan',

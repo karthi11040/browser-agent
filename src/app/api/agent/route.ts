@@ -87,6 +87,20 @@ export async function POST(req: NextRequest) {
             case 'step_error':
               send(ev)
               break
+            case 'screenshot':
+              // Update the matching step with screenshotPath + pageUrl
+              if (ev.stepId) {
+                const idx = steps.findIndex((s) => s.id === ev.stepId)
+                if (idx >= 0) {
+                  steps[idx] = {
+                    ...steps[idx],
+                    screenshotPath: ev.webPath,
+                    pageUrl: ev.pageUrl,
+                  }
+                }
+              }
+              send(ev)
+              break
             case 'final':
               for (const s of ev.sources) {
                 if (!sources.some((x) => x.url === s.url)) sources.push(s)
