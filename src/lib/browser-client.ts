@@ -1,6 +1,6 @@
 import { execSync } from 'child_process'
 import { randomUUID } from 'crypto'
-import { mkdirSync, rmSync } from 'fs'
+import { mkdirSync, rmSync, readdirSync, unlinkSync } from 'fs'
 import { join as pathJoin } from 'path'
 
 // ---------------------------------------------------------------------------
@@ -127,6 +127,63 @@ export function screenshot(
     ok: true,
     webPath: `/agent-screenshots/${session.runId}/step-${stepIdx}.png`,
     filePath,
+  }
+}
+
+// Take a "live frame" screenshot — used by the live-feed poller that runs
+// in parallel with the main agent loop. Each frame gets a unique filename
+// (frame-{frameIdx}.png) so the browser always sees a fresh URL and never
+// serves a cached image. Short timeout so we skip frames fast when the
+// session is busy with an action.
+export function liveFrame(
+  session: BrowserSession,
+  frameIdx: number
+): ScreenshotResult {
+  const filePath = pathJoin(
+    SCREENSHOTS_DIR,
+    session.runId,
+    `frame-${frameIdx}.png`
+  )
+  const r = run(
+    `agent-browser --session ${session.sessionId} screenshot "${filePath}"`,
+    5_000
+  )
+  if (!r.ok) {
+    return { ok: false, error: r.stderr || 'live frame failed' }
+  }
+  return {
+    ok: true,
+    webPath: `/agent-screenshots/${session.runId}/frame-${frameIdx}.png?ts=${Date.now()}`,
+    filePath,
+  }
+}
+
+// Re-attach to an existing browser session by id — used by the live-frame
+// poller which runs in the route handler (separate from the agent
+// generator's closure).
+export function attachToSession(
+  sessionId: string,
+  runId: string
+): BrowserSession {
+  return { sessionId, runId }
+}
+
+// Remove all live-frame PNGs for a run (called after the run completes —
+// the per-step PNGs are kept since they're linked to step records for the
+// timeline + history).
+export function cleanupLiveFrames(runId: string) {
+  const dir = pathJoin(SCREENSHOTS_DIR, runId)
+  try {
+    const files = readdirSync(dir)
+    for (const f of files) {
+      if (f.startsWith('frame-')) {
+        try {
+          unlinkSync(pathJoin(dir, f))
+        } catch {}
+      }
+    }
+  } catch {
+    /* dir doesn't exist or not readable — ignore */
   }
 }
 

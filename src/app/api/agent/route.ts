@@ -8,6 +8,12 @@ import {
 } from '@/lib/agent'
 import type { RecoveryState } from '@/lib/recovery'
 import type { PendingConfirmation } from '@/lib/confirmation'
+import {
+  attachToSession,
+  liveFrame,
+  getUrl,
+  cleanupLiveFrames,
+} from '@/lib/browser-client'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -69,9 +75,95 @@ export async function POST(req: NextRequest) {
       const sources: AgentSource[] = []
       let waitingForConfirmation = false
 
+      // ----- Live-frame poller (browser mode only) -----
+      // Runs in parallel with the agent generator. Every ~2.5s (when not
+      // already mid-screenshot) it takes a fresh screenshot of the headless
+      // browser and streams it to the client as a `live_frame` event — this
+      // is what makes the Live Browser Preview panel feel like a continuous
+      // feed rather than per-action snapshots.
+      //
+      // IMPORTANT: the interval is conservative (~0.4 fps) because each
+      // `agent-browser` CLI invocation spawns a child process that connects
+      // to the persistent Chrome via CDP — too many concurrent spawns hit
+      // the system's pthread limit (we saw "Resource temporarily
+      // unavailable" with a tighter interval). The poller also skips ticks
+      // while the previous frame is still being captured, so we never have
+      // more than one live-frame screenshot in-flight at a time.
+      let livePoller: { stop: () => void } | null = null
+      const startLivePoller = (sessionId: string) => {
+        const session = attachToSession(sessionId, run.id)
+        let stopped = false
+        let inFlight = false
+        let frameIdx = 0
+        const POLL_INTERVAL_MS = 1200
+        const INITIAL_DELAY_MS = 500
+
+        const tick = async () => {
+          if (stopped) return
+          if (inFlight) {
+            // Previous frame still being captured — try again shortly
+            setTimeout(tick, 300)
+            return
+          }
+          inFlight = true
+          try {
+            frameIdx += 1
+            const r = liveFrame(session, frameIdx)
+            if (r.ok && r.webPath) {
+              let pageUrl: string | undefined
+              try {
+                const urlInfo = getUrl(session)
+                if (urlInfo.ok && urlInfo.url) pageUrl = urlInfo.url
+              } catch {
+                /* ignore */
+              }
+              send({
+                type: 'live_frame',
+                webPath: r.webPath,
+                pageUrl,
+                ts: Date.now(),
+                frameIdx,
+              })
+            }
+          } catch {
+            /* ignore — agent-browser may queue or error if the session is busy */
+          } finally {
+            inFlight = false
+            if (!stopped) {
+              setTimeout(tick, POLL_INTERVAL_MS)
+            }
+          }
+        }
+        // Kick off the first tick soon so we capture the very first page state
+        setTimeout(tick, INITIAL_DELAY_MS)
+
+        livePoller = {
+          stop: () => {
+            stopped = true
+          },
+        }
+      }
+      const stopLivePoller = () => {
+        if (livePoller) {
+          livePoller.stop()
+          livePoller = null
+        }
+        // Clean up the frame PNGs to free disk
+        try {
+          cleanupLiveFrames(run.id)
+        } catch {}
+      }
+
       try {
         for await (const ev of runAgent(prompt, mode, run.id)) {
           switch (ev.type) {
+            case 'session_started':
+              // Browser session is up — start streaming live frames
+              if (mode === 'browser') {
+                startLivePoller(ev.sessionId)
+              }
+              send(ev)
+              break
             case 'step_start':
               steps.push(ev.step)
               send({ type: 'step_start', step: ev.step })
@@ -104,8 +196,11 @@ export async function POST(req: NextRequest) {
               }
               send(ev)
               break
+            case 'live_frame':
+              // Frames come from the parallel poller — forward as-is
+              send(ev)
+              break
             case 'validation':
-              // Update step with validation result + emit
               if (ev.stepId) {
                 const idx = steps.findIndex((s) => s.id === ev.stepId)
                 if (idx >= 0) {
@@ -134,6 +229,7 @@ export async function POST(req: NextRequest) {
               break
             case 'confirmation_request':
               waitingForConfirmation = true
+              stopLivePoller()
               send({
                 type: 'confirmation_request',
                 pending: ev.pending as PendingConfirmation,
@@ -141,6 +237,7 @@ export async function POST(req: NextRequest) {
               })
               break
             case 'final':
+              stopLivePoller()
               for (const s of ev.sources) {
                 if (!sources.some((x) => x.url === s.url)) sources.push(s)
               }
@@ -163,6 +260,7 @@ export async function POST(req: NextRequest) {
               })
               break
             case 'error':
+              stopLivePoller()
               send(ev)
               await db.agentRun.update({
                 where: { id: run.id },
@@ -180,6 +278,7 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch (err: any) {
+        stopLivePoller()
         const message = err?.message ?? 'agent crashed'
         send({ type: 'error', error: message })
         await db.agentRun.update({
@@ -192,6 +291,7 @@ export async function POST(req: NextRequest) {
           },
         })
       } finally {
+        stopLivePoller()
         send({ type: 'done', runId: run.id })
         controller.close()
       }

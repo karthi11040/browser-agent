@@ -149,6 +149,8 @@ interface AgentEvent {
     | 'step_complete'
     | 'step_error'
     | 'screenshot'
+    | 'live_frame'
+    | 'session_started'
     | 'validation'
     | 'verification'
     | 'recovery_state'
@@ -157,6 +159,7 @@ interface AgentEvent {
     | 'done'
     | 'error'
   runId?: string
+  sessionId?: string
   prompt?: string
   mode?: string
   stepId?: string
@@ -173,6 +176,8 @@ interface AgentEvent {
   reason?: string
   nextSeed?: string
   pending?: PendingConfirmation
+  ts?: number
+  frameIdx?: number
 }
 
 const MODES: { key: AgentMode; label: string; desc: string; icon: any }[] = [
@@ -250,6 +255,9 @@ export default function Home() {
     webPath: string
     pageUrl?: string
     stepId?: string
+    isLiveFrame?: boolean
+    ts?: number
+    frameIdx?: number
   } | null>(null)
   // Pending HIGH-risk confirmation (Phase 3 of the spec)
   const [pendingConfirmation, setPendingConfirmation] =
@@ -402,6 +410,7 @@ export default function Home() {
             webPath: ev.webPath,
             pageUrl: ev.pageUrl,
             stepId: ev.stepId,
+            isLiveFrame: false,
           })
           if (ev.stepId) {
             setSteps((s) =>
@@ -416,6 +425,19 @@ export default function Home() {
               )
             )
           }
+        }
+        break
+      case 'live_frame':
+        // Continuous frame from the live-feed poller — replaces the
+        // preview image every ~800ms while the agent is running.
+        if (ev.webPath) {
+          setLiveScreenshot({
+            webPath: ev.webPath,
+            pageUrl: ev.pageUrl,
+            isLiveFrame: true,
+            ts: ev.ts,
+            frameIdx: ev.frameIdx,
+          })
         }
         break
       case 'validation':
@@ -1129,14 +1151,14 @@ export default function Home() {
                 </div>
               </Card>
 
-              {/* Live Browser Preview (browser mode only) */}
+              {/* Live Browser Preview (browser mode only) — continuous feed */}
               {mode === 'browser' && (
                 <Card className="p-4 md:p-5 bg-card/80 backdrop-blur border-[var(--agent-accent)]/20 flex flex-col">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <MonitorPlay className="w-4 h-4 agent-accent" />
                       <h3 className="font-medium text-sm">
-                        Live browser preview
+                        Live web feed
                       </h3>
                     </div>
                     {running && (
@@ -1145,19 +1167,30 @@ export default function Home() {
                         className="agent-running border-[var(--agent-running)]/40"
                       >
                         <span className="w-1.5 h-1.5 rounded-full bg-[var(--agent-running)] agent-pulse mr-1" />
-                        Live
+                        LIVE
                       </Badge>
+                    )}
+                    {liveScreenshot?.frameIdx && (
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        frame #{liveScreenshot.frameIdx}
+                      </span>
                     )}
                   </div>
 
                   {liveScreenshot ? (
                     <div className="space-y-2">
-                      <div className="rounded-md overflow-hidden border bg-black/30">
+                      <div className="relative rounded-md overflow-hidden border bg-black/30">
                         <img
+                          key={liveScreenshot.webPath}
                           src={liveScreenshot.webPath}
-                          alt="Latest browser screenshot"
+                          alt="Live browser frame"
                           className="w-full h-auto block"
                         />
+                        {running && liveScreenshot.isLiveFrame && (
+                          <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-mono bg-black/60 text-amber-300 backdrop-blur-sm">
+                            ● LIVE
+                          </span>
+                        )}
                       </div>
                       {liveScreenshot.pageUrl && (
                         <a
@@ -1173,10 +1206,15 @@ export default function Home() {
                           </span>
                         </a>
                       )}
-                      <div className="text-[11px] text-muted-foreground">
-                        {running
-                          ? 'Agent is driving the page — screenshot updates after each action.'
-                          : 'Final screenshot from the agent run.'}
+                      <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                        {running ? (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--agent-running)] agent-pulse" />
+                            Live web feed — frames stream continuously while the agent drives the page.
+                          </>
+                        ) : (
+                          'Final frame from the agent run.'
+                        )}
                       </div>
                     </div>
                   ) : running ? (
@@ -1190,7 +1228,7 @@ export default function Home() {
                     <div className="aspect-[4/3] rounded-md border border-dashed flex items-center justify-center text-xs text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <Camera className="w-5 h-5" />
-                        Screenshots will appear here as the agent acts.
+                        Live frames will stream here once the agent starts.
                       </div>
                     </div>
                   )}

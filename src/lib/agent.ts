@@ -131,6 +131,8 @@ export type AgentEvent =
   | { type: 'verification'; stepId: string; verification: StepVerification }
   | { type: 'recovery_state'; state: RecoveryState; reason: string; nextSeed?: string }
   | { type: 'confirmation_request'; pending: PendingConfirmation; runId: string }
+  | { type: 'session_started'; runId: string; sessionId: string }
+  | { type: 'live_frame'; webPath: string; pageUrl?: string; ts: number; frameIdx: number }
   | { type: 'final'; content: string; sources: AgentSource[] }
   | { type: 'done'; runId: string }
   | { type: 'error'; error: string }
@@ -598,6 +600,10 @@ async function* runBrowserAgent(
     yield { type: 'error', error: `Browser session init failed: ${err?.message ?? err}` }
     return
   }
+  // Notify the route handler that the browser session is up — it'll start
+  // the live-frame poller in parallel with this generator so we get a
+  // continuous video-like feed rather than per-action snapshots.
+  yield { type: 'session_started', runId, sessionId: session.sessionId }
 
   const recovery = createRecoverySnapshot()
   const startedAt = Date.now()
