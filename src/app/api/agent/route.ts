@@ -6,6 +6,8 @@ import {
   type AgentStep,
   type AgentSource,
 } from '@/lib/agent'
+import type { RecoveryState } from '@/lib/recovery'
+import type { PendingConfirmation } from '@/lib/confirmation'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -65,9 +67,10 @@ export async function POST(req: NextRequest) {
 
       const steps: AgentStep[] = []
       const sources: AgentSource[] = []
+      let waitingForConfirmation = false
 
       try {
-        for await (const ev of runAgent(prompt, mode)) {
+        for await (const ev of runAgent(prompt, mode, run.id)) {
           switch (ev.type) {
             case 'step_start':
               steps.push(ev.step)
@@ -101,6 +104,42 @@ export async function POST(req: NextRequest) {
               }
               send(ev)
               break
+            case 'validation':
+              // Update step with validation result + emit
+              if (ev.stepId) {
+                const idx = steps.findIndex((s) => s.id === ev.stepId)
+                if (idx >= 0) {
+                  steps[idx] = {
+                    ...steps[idx],
+                    validation: ev.validation,
+                  }
+                }
+              }
+              send(ev)
+              break
+            case 'verification':
+              if (ev.stepId) {
+                const idx = steps.findIndex((s) => s.id === ev.stepId)
+                if (idx >= 0) {
+                  steps[idx] = {
+                    ...steps[idx],
+                    verification: ev.verification,
+                  }
+                }
+              }
+              send(ev)
+              break
+            case 'recovery_state':
+              send(ev)
+              break
+            case 'confirmation_request':
+              waitingForConfirmation = true
+              send({
+                type: 'confirmation_request',
+                pending: ev.pending as PendingConfirmation,
+                runId: ev.runId,
+              })
+              break
             case 'final':
               for (const s of ev.sources) {
                 if (!sources.some((x) => x.url === s.url)) sources.push(s)
@@ -113,7 +152,9 @@ export async function POST(req: NextRequest) {
               await db.agentRun.update({
                 where: { id: run.id },
                 data: {
-                  status: 'completed',
+                  status: waitingForConfirmation
+                    ? 'waiting_for_confirmation'
+                    : 'completed',
                   result: ev.content,
                   sourcesJson: JSON.stringify(ev.sources),
                   stepsJson: JSON.stringify(steps),

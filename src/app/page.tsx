@@ -30,6 +30,11 @@ import {
   MonitorPlay,
   ShieldAlert,
   Camera,
+  ShieldCheck,
+  ShieldX,
+  AlertTriangle,
+  CheckCircle,
+  Lock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -37,18 +42,70 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
 // Types — mirror the server-side agent library
 // ---------------------------------------------------------------------------
 
-type AgentMode = 'general' | 'research' | 'code' | 'summarize'
+type AgentMode = 'general' | 'research' | 'code' | 'summarize' | 'browser'
 
 interface AgentSource {
   title: string
   url: string
   snippet?: string
+}
+
+type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
+
+interface StepValidation {
+  valid: boolean
+  risk: RiskLevel
+  riskReason: string
+  requiresConfirmation: boolean
+  failureReason?: string
+  targetElementId?: string
+  targetElementRef?: string
+}
+
+interface StepVerification {
+  verified: boolean
+  reason: string
+  deltas?: {
+    urlChanged?: boolean
+    urlFrom?: string
+    urlTo?: string
+    elementCountDelta?: number
+    extractedTextLength?: number
+    extractedTextMatchesPattern?: boolean
+    patternTested?: string
+  }
+}
+
+type RecoveryState =
+  | 'NORMAL'
+  | 'BLOCKED'
+  | 'RECOVERING'
+  | 'ESCALATED'
+  | 'DONE'
+  | 'FAILED'
+
+interface PendingConfirmation {
+  runId: string
+  stepId: string
+  action: Record<string, unknown>
+  riskReason: string
+  summary: string
+  token: string
+  pageUrl?: string
 }
 
 interface AgentStep {
@@ -61,17 +118,25 @@ interface AgentStep {
     | 'compose'
     | 'navigate'
     | 'click'
+    | 'click_text'
+    | 'click_role'
     | 'type'
     | 'press'
     | 'extract'
+    | 'wait'
+    | 'scroll'
+    | 'back'
     | 'reflect'
   intent: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'awaiting_confirmation'
   detail?: string
   output?: string
   sources?: AgentSource[]
   screenshotPath?: string
   pageUrl?: string
+  validation?: StepValidation
+  verification?: StepVerification
+  recoveryState?: RecoveryState
   startedAt?: number
   endedAt?: number
 }
@@ -84,6 +149,10 @@ interface AgentEvent {
     | 'step_complete'
     | 'step_error'
     | 'screenshot'
+    | 'validation'
+    | 'verification'
+    | 'recovery_state'
+    | 'confirmation_request'
     | 'final'
     | 'done'
     | 'error'
@@ -98,6 +167,12 @@ interface AgentEvent {
   webPath?: string
   pageUrl?: string
   error?: string
+  validation?: StepValidation
+  verification?: StepVerification
+  state?: RecoveryState
+  reason?: string
+  nextSeed?: string
+  pending?: PendingConfirmation
 }
 
 const MODES: { key: AgentMode; label: string; desc: string; icon: any }[] = [
@@ -176,6 +251,12 @@ export default function Home() {
     pageUrl?: string
     stepId?: string
   } | null>(null)
+  // Pending HIGH-risk confirmation (Phase 3 of the spec)
+  const [pendingConfirmation, setPendingConfirmation] =
+    useState<PendingConfirmation | null>(null)
+  // Recovery state for the run — surfaced as a badge in the header / timeline
+  const [recoveryState, setRecoveryState] = useState<RecoveryState | null>(null)
+  const [recoveryReason, setRecoveryReason] = useState<string | null>(null)
 
   // History sidebar
   const [history, setHistory] = useState<
@@ -217,6 +298,9 @@ export default function Home() {
     setError(null)
     setRunId(null)
     setLiveScreenshot(null)
+    setPendingConfirmation(null)
+    setRecoveryState(null)
+    setRecoveryReason(null)
   }, [])
 
   // ----- Run the agent -----
@@ -334,6 +418,39 @@ export default function Home() {
           }
         }
         break
+      case 'validation':
+        if (ev.stepId && ev.validation) {
+          setSteps((s) =>
+            s.map((st) =>
+              st.id === ev.stepId
+                ? { ...st, validation: ev.validation }
+                : st
+            )
+          )
+        }
+        break
+      case 'verification':
+        if (ev.stepId && ev.verification) {
+          setSteps((s) =>
+            s.map((st) =>
+              st.id === ev.stepId
+                ? { ...st, verification: ev.verification }
+                : st
+            )
+          )
+        }
+        break
+      case 'recovery_state':
+        if (ev.state) {
+          setRecoveryState(ev.state)
+          setRecoveryReason(ev.reason ?? null)
+        }
+        break
+      case 'confirmation_request':
+        if (ev.pending) {
+          setPendingConfirmation(ev.pending)
+        }
+        break
       case 'final':
         if (ev.content) setFinalContent(ev.content)
         if (ev.sources) setSources(ev.sources)
@@ -407,6 +524,30 @@ export default function Home() {
     setRunning(false)
   }, [])
 
+  // ----- Handle confirmation modal approve/reject -----
+  const [confirming, setConfirming] = useState(false)
+  const decideConfirmation = useCallback(
+    async (decision: 'approved' | 'rejected') => {
+      if (!pendingConfirmation) return
+      setConfirming(true)
+      try {
+        await fetch('/api/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: pendingConfirmation.token,
+            decision,
+          }),
+        })
+        setPendingConfirmation(null)
+        refreshHistory()
+      } finally {
+        setConfirming(false)
+      }
+    },
+    [pendingConfirmation, refreshHistory]
+  )
+
   // ----- Render -----
   const hasSteps = steps.length > 0
   const hasResult = finalContent.length > 0
@@ -457,6 +598,38 @@ export default function Home() {
             ) : (
               <Badge variant="outline" className="text-muted-foreground">
                 Idle
+              </Badge>
+            )}
+            {recoveryState && recoveryState !== 'NORMAL' && (
+              <Badge
+                variant="outline"
+                className={
+                  recoveryState === 'BLOCKED' || recoveryState === 'FAILED'
+                    ? 'agent-failed border-[var(--agent-failed)]/40'
+                    : recoveryState === 'RECOVERING'
+                      ? 'agent-running border-[var(--agent-running)]/40'
+                      : recoveryState === 'ESCALATED'
+                        ? 'border-amber-500/40 text-amber-600 dark:text-amber-500'
+                        : 'agent-accent border-[var(--agent-accent)]/40'
+                }
+                title={recoveryReason ?? undefined}
+              >
+                {recoveryState === 'BLOCKED' && (
+                  <ShieldX className="w-3 h-3 mr-1" />
+                )}
+                {recoveryState === 'RECOVERING' && (
+                  <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                )}
+                {recoveryState === 'ESCALATED' && (
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                )}
+                {recoveryState === 'DONE' && (
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                )}
+                {recoveryState === 'FAILED' && (
+                  <XCircle className="w-3 h-3 mr-1" />
+                )}
+                {recoveryState}
               </Badge>
             )}
           </div>
@@ -804,6 +977,84 @@ export default function Home() {
                             <div className="text-sm mt-1.5 leading-snug">
                               {step.intent}
                             </div>
+                            {/* Validation badge (Phase 3 spec) */}
+                            {step.validation && (
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    step.validation.valid
+                                      ? step.validation.risk === 'HIGH'
+                                        ? 'border-amber-500/40 text-amber-600 dark:text-amber-500 px-1 py-0'
+                                        : step.validation.risk === 'MEDIUM'
+                                          ? 'border-[var(--agent-running)]/40 agent-running px-1 py-0'
+                                          : 'agent-accent border-[var(--agent-accent)]/40 px-1 py-0'
+                                      : 'agent-failed border-[var(--agent-failed)]/40 px-1 py-0'
+                                  }
+                                  title={step.validation.riskReason}
+                                >
+                                  {step.validation.valid ? (
+                                    <ShieldCheck className="w-2.5 h-2.5 mr-0.5" />
+                                  ) : (
+                                    <ShieldX className="w-2.5 h-2.5 mr-0.5" />
+                                  )}
+                                  {step.validation.valid
+                                    ? `VALID · ${step.validation.risk}`
+                                    : 'INVALID'}
+                                  {step.validation.requiresConfirmation &&
+                                    step.validation.valid && (
+                                      <Lock className="w-2.5 h-2.5 ml-1" />
+                                    )}
+                                </Badge>
+                                {step.validation.targetElementId && (
+                                  <span className="text-muted-foreground">
+                                    target: {step.validation.targetElementRef}{' '}
+                                    ({step.validation.targetElementId.slice(0, 16)})
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {/* Verification badge (Phase 3 spec) */}
+                            {step.verification && (
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px]">
+                                <Badge
+                  variant="outline"
+                  className={
+                    step.verification.verified
+                      ? 'agent-accent border-[var(--agent-accent)]/40 px-1 py-0'
+                      : 'agent-failed border-[var(--agent-failed)]/40 px-1 py-0'
+                  }
+                  title={step.verification.reason}
+                                >
+                                  {step.verification.verified ? (
+                                    <CheckCircle className="w-2.5 h-2.5 mr-0.5" />
+                                  ) : (
+                                    <XCircle className="w-2.5 h-2.5 mr-0.5" />
+                                  )}
+                                  {step.verification.verified ? 'VERIFIED' : 'UNVERIFIED'}
+                                </Badge>
+                                <span className="text-muted-foreground truncate max-w-[280px]">
+                                  {step.verification.reason}
+                                </span>
+                              </div>
+                            )}
+                            {/* Recovery-state badge on individual step */}
+                            {step.recoveryState && step.recoveryState !== 'NORMAL' && (
+                              <div className="mt-1">
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    step.recoveryState === 'RECOVERING'
+                                      ? 'agent-running border-[var(--agent-running)]/40 px-1 py-0 text-[10px]'
+                                      : step.recoveryState === 'ESCALATED'
+                                        ? 'border-amber-500/40 text-amber-600 dark:text-amber-500 px-1 py-0 text-[10px]'
+                                        : 'agent-failed border-[var(--agent-failed)]/40 px-1 py-0 text-[10px]'
+                                  }
+                                >
+                                  {step.recoveryState}
+                                </Badge>
+                              </div>
+                            )}
                             {step.detail && (
                               <div className="text-xs text-muted-foreground mt-1">
                                 {step.detail}
@@ -1105,6 +1356,101 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      {/* Confirmation modal for HIGH-risk actions (Phase 3 of the spec) */}
+      <Dialog
+        open={pendingConfirmation !== null}
+        onOpenChange={(open) => {
+          if (!open && pendingConfirmation && !confirming) {
+            // Closing without a decision = reject (safer default)
+            decideConfirmation('rejected')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-500">
+              <AlertTriangle className="w-5 h-5" />
+              Approve HIGH-risk action?
+            </DialogTitle>
+            <DialogDescription>
+              The agent wants to perform an action the safety policy classifies
+              as <strong>HIGH</strong> risk. It is paused for your explicit
+              approval.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingConfirmation && (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-md border bg-muted/40 p-3">
+                <div className="text-xs uppercase text-muted-foreground mb-1">
+                  Proposed action
+                </div>
+                <pre className="text-xs font-mono whitespace-pre-wrap break-words">
+                  {JSON.stringify(pendingConfirmation.action, null, 2)}
+                </pre>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <div className="text-muted-foreground">Summary</div>
+                  <div className="font-medium">
+                    {pendingConfirmation.summary}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Page</div>
+                  <div className="font-medium truncate" title={pendingConfirmation.pageUrl ?? ''}>
+                    {pendingConfirmation.pageUrl ?? '(unknown)'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Token</div>
+                  <div className="font-mono text-[10px] truncate" title={pendingConfirmation.token}>
+                    {pendingConfirmation.token.slice(0, 24)}…
+                  </div>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                <strong className="text-amber-600 dark:text-amber-500">
+                  Risk reason:
+                </strong>{' '}
+                {pendingConfirmation.riskReason}
+              </div>
+              <div className="text-[11px] text-muted-foreground border-t pt-2">
+                The token is signed, single-use, and expires in 5 minutes.
+                Approving marks it consumed; rejecting also consumes it. The
+                action is NOT auto-resumed in this iteration — the
+                confirmation is recorded for audit and the run ends in
+                <code className="font-mono mx-1">waiting_for_confirmation</code>
+                status.
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => decideConfirmation('rejected')}
+              disabled={confirming}
+              className="agent-failed border-[var(--agent-failed)]/40 text-[var(--agent-failed)]"
+            >
+              <ShieldX className="w-4 h-4 mr-1" /> Reject
+            </Button>
+            <Button
+              onClick={() => decideConfirmation('approved')}
+              disabled={confirming}
+              className="bg-amber-600 hover:bg-amber-700 text-white border border-amber-700"
+            >
+              {confirming ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <ShieldCheck className="w-4 h-4 mr-1" />
+              )}
+              Approve
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
