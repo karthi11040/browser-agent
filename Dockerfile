@@ -8,7 +8,7 @@ COPY package*.json tsconfig.json ./
 # Install dependencies
 RUN npm ci
 
-# Copy source code
+# Copy source code and static assets
 COPY . .
 
 # Build TypeScript to dist
@@ -20,9 +20,10 @@ ENV HEADLESS=true
 ENV ALLOWED_DOMAINS=*
 ENV PORT=3000
 
+EXPOSE 3000
+
 # Link binary globally
 RUN npm link
 
-EXPOSE 3000
-
+# Launch BrowserAgent Web Dashboard by default
 CMD ["agent", "ui", "--no-open"]

@@ -166,8 +166,8 @@ export function createCli(): Command {
     .option('--no-open', 'Do not automatically open browser')
     .action((options: any) => {
       startDashboardServer({
-        port: parseInt(options.port || process.env.PORT || '3000', 10),
-        openBrowser: options.open !== false && !process.env.PORT,
+        port: parseInt(options.port, 10),
+        openBrowser: options.open !== false,
       });
     });
 

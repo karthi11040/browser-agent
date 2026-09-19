@@ -25,7 +25,7 @@ export interface ServerOptions {
 
 export function startDashboardServer(options: ServerOptions = {}): http.Server {
   const port = options.port || (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
-  const openBrowser = options.openBrowser ?? (process.env.NODE_ENV !== 'production' && !process.env.PORT);
+  const openBrowser = options.openBrowser ?? (process.env.NODE_ENV !== 'production');
 
   initializeDefaultChat();
 
@@ -335,7 +335,7 @@ export function startDashboardServer(options: ServerOptions = {}): http.Server {
     res.end('Not Found');
   });
 
-  server.listen(port, () => {
+  server.listen(port, '0.0.0.0', () => {
     const url = `http://localhost:${port}`;
     console.log(chalk.bold.cyan(`\n🌐 BrowserAgent Web Dashboard running at: ${chalk.underline.white(url)}`));
     console.log(chalk.gray(`Active Model: ${chalk.magenta(process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v4-flash-0731:free')}\n`));

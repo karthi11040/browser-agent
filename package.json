@@ -6,10 +6,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "agent": "./bin/agent.js"
+    "agent": "./dist/bin/agent.js"
   },
   "scripts": {
     "build": "tsc",
+    "start": "node dist/bin/agent.js ui --no-open",
     "agent": "tsx bin/agent.ts",
     "ui": "tsx bin/agent.ts ui",
     "dev": "tsx bin/agent.ts ui",
