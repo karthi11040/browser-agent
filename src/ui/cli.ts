@@ -162,12 +162,12 @@ export function createCli(): Command {
   program
     .command('ui')
     .description('Launch the browser agent web studio frontend dashboard')
-    .option('-p, --port <port>', 'Port to listen on', '3000')
+    .option('-p, --port <port>', 'Port to listen on', process.env.PORT || '3000')
     .option('--no-open', 'Do not automatically open browser')
     .action((options: any) => {
       startDashboardServer({
-        port: parseInt(options.port, 10),
-        openBrowser: options.open !== false,
+        port: parseInt(options.port || process.env.PORT || '3000', 10),
+        openBrowser: options.open !== false && !process.env.PORT,
       });
     });
 

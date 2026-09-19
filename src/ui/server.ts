@@ -24,8 +24,8 @@ export interface ServerOptions {
 }
 
 export function startDashboardServer(options: ServerOptions = {}): http.Server {
-  const port = options.port || 3000;
-  const openBrowser = options.openBrowser ?? true;
+  const port = options.port || (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+  const openBrowser = options.openBrowser ?? (process.env.NODE_ENV !== 'production' && !process.env.PORT);
 
   initializeDefaultChat();
 

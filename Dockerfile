@@ -18,9 +18,11 @@ RUN npm run build
 ENV NODE_ENV=production
 ENV HEADLESS=true
 ENV ALLOWED_DOMAINS=*
+ENV PORT=3000
 
 # Link binary globally
 RUN npm link
 
-ENTRYPOINT ["agent"]
-CMD ["--help"]
+EXPOSE 3000
+
+CMD ["agent", "ui", "--no-open"]
