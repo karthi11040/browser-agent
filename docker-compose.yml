@@ -1,12 +1,18 @@
 services:
-  agent:
+  browser-agent:
     build: .
+    container_name: browser-agent
+    ports:
+      - "${PORT:-3000}:3000"
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-anthropic/claude-3.5-sonnet}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-deepseek/deepseek-v4-flash-0731:free}
       - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-*}
       - HEADLESS=true
+      - PORT=3000
+      - NODE_ENV=production
     volumes:
+      - ./data:/app/data
       - ./.sessions:/app/.sessions
       - ./screenshots:/app/screenshots
-    command: ["run", "Search for latest AI agent news", "--url", "https://news.ycombinator.com"]
+    restart: unless-stopped

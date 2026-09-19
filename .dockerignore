@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.sessions
+.env
+.env.local
+*.log
+npm-debug.log*
+.DS_Store
+screenshots/*.png
+screenshots/*.jpg

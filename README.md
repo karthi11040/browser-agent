@@ -277,21 +277,33 @@ npm run typecheck
 
 ## 🐳 Docker Deployment
 
-Run the agent in a containerized environment with Playwright and Chromium pre-configured:
+Run BrowserAgent in a containerized Linux environment with Playwright and Chromium pre-configured:
 
+### 1. Web Studio Dashboard (Recommended)
 ```bash
 # Build the container
 docker build -t browser-agent .
 
-# Run container with your OpenRouter key
-docker run --rm -it \
+# Run the web dashboard container on port 3000
+docker run -d -p 3000:3000 \
   -e OPENROUTER_API_KEY="your-api-key" \
-  browser-agent run "Search AI breakthroughs" --url "https://news.ycombinator.com"
+  -v $(pwd)/data:/app/data \
+  --name browser-agent browser-agent
+
+# Open in browser
+open http://localhost:3000
 ```
 
-Or using Docker Compose:
+### 2. Using Docker Compose
 ```bash
-docker compose run agent
+docker compose up -d
+```
+
+### 3. Headless CLI Task Run
+```bash
+docker run --rm -it \
+  -e OPENROUTER_API_KEY="your-api-key" \
+  browser-agent agent run "Search AI breakthroughs" --url "https://news.ycombinator.com"
 ```
 
 ---
