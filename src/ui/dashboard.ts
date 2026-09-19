@@ -7,6 +7,7 @@ export function getDashboardHtml(): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BrowserAgent — Autonomous Web Agent Studio</title>
+  <link rel="icon" type="image/png" href="/logo.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,7 +26,7 @@ export function getDashboardHtml(): string {
               dark: '#0d0d0e',
               darker: '#080809',
               card: '#141416',
-              cardHover: '#1a1a1e',
+              cardHover: '#1c1c20',
               border: 'rgba(255, 255, 255, 0.08)',
               text: '#ededed',
               muted: '#8e8e93',
@@ -34,11 +35,12 @@ export function getDashboardHtml(): string {
             },
             light: {
               bg: '#FFFFFF',
-              sidebar: '#F9F9F9',
-              card: '#F4F4F4',
-              border: '#E5E5E5',
-              text: '#0D0D0D',
-              muted: '#707070',
+              sidebar: '#F8FAFC',
+              card: '#FFFFFF',
+              cardHover: '#F1F5F9',
+              border: '#E2E8F0',
+              text: '#0F172A',
+              muted: '#64748B',
             }
           }
         }
@@ -59,15 +61,79 @@ export function getDashboardHtml(): string {
     html.dark #chatPane { background-color: #0d0d0e !important; border-color: rgba(255, 255, 255, 0.07) !important; }
     html.dark #browserPane { background-color: #09090b !important; border-color: rgba(255, 255, 255, 0.07) !important; }
 
-    html.dark .bg-light-card, html.dark .bg-light-bg, html.dark [class*="dark:bg-gpt-card"] {
+    /* Exclude view-btn and canvas-tab from blanket dark background overrides so active states stand out */
+    html.dark .bg-light-card:not(.view-btn):not(.canvas-tab),
+    html.dark .bg-light-bg:not(.view-btn):not(.canvas-tab),
+    html.dark [class*="dark:bg-gpt-card"]:not(.view-btn):not(.canvas-tab) {
       background-color: #141416 !important; border-color: rgba(255, 255, 255, 0.07) !important;
     }
     html.dark h1, html.dark h2, html.dark h3, html.dark strong, html.dark .font-semibold { color: #fafafa !important; }
     html.dark [class*="text-light-muted"], html.dark [class*="dark:text-gpt-muted"] { color: #88888e !important; }
     html.dark [class*="border-light-border"], html.dark [class*="dark:border-gpt-border"] { border-color: rgba(255, 255, 255, 0.07) !important; }
 
-    .step-desc-full { font-size: 0.77rem; color: #ededed; line-height: 1.5; white-space: pre-wrap; word-break: break-word; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; margin-top: 4px; border: 1px solid rgba(255,255,255,0.08); }
-    .learn-badge { background: linear-gradient(135deg, #8b5cf6, #06b6d4); color: white; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 10px; text-transform: uppercase; }
+    /* Crisp Light and Dark styling for step output & strategy */
+    .step-desc-full {
+      font-size: 0.82rem;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f8fafc;
+      color: #0f172a;
+      padding: 12px 16px;
+      border-radius: 12px;
+      margin-top: 6px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    html.dark .step-desc-full {
+      background: rgba(255, 255, 255, 0.04) !important;
+      color: #f1f5f9 !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      box-shadow: none;
+    }
+
+    .learn-badge {
+      background: linear-gradient(135deg, #6366f1, #06b6d4);
+      color: #ffffff;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      box-shadow: 0 2px 4px rgba(99, 102, 241, 0.25);
+    }
+
+    /* Active view mode button styling in light and dark (black screen) */
+    .view-btn.active {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      border: 1px solid #cbd5e1 !important;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+    }
+    html.dark .view-btn.active {
+      background-color: rgba(16, 185, 129, 0.2) !important;
+      color: #34d399 !important;
+      border: 1px solid rgba(16, 185, 129, 0.45) !important;
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.28) !important;
+    }
+
+    /* Active canvas tab styling */
+    .canvas-tab.active {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
+    }
+    html.dark .canvas-tab.active {
+      background-color: #27272a !important;
+      color: #34d399 !important;
+      border: 1px solid rgba(16, 185, 129, 0.3) !important;
+    }
+
+    /* Smooth animated transitions between View Modes */
+    #chatPane, #browserPane {
+      transition: flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease-in-out;
+    }
   </style>
 </head>
 <body class="bg-light-bg dark:bg-gpt-dark text-light-text dark:text-gpt-text font-sans antialiased h-screen overflow-hidden flex transition-colors duration-200">
@@ -77,9 +143,7 @@ export function getDashboardHtml(): string {
     <div class="p-3 flex flex-col gap-2">
       <div class="flex items-center justify-between px-2 py-1.5">
         <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white shadow-sm font-bold text-sm">
-            🤖
-          </div>
+          <img src="/logo.png" alt="BrowserAgent Logo" class="w-8 h-8 rounded-xl object-cover shadow-sm ring-1 ring-emerald-500/25 flex-shrink-0">
           <div>
             <div class="font-semibold text-sm tracking-tight flex items-center gap-1.5">
               BrowserAgent
@@ -166,10 +230,10 @@ export function getDashboardHtml(): string {
       </div>
 
       <!-- View Mode Pills -->
-      <div class="hidden md:flex items-center p-1 rounded-xl bg-light-card dark:bg-gpt-card border border-light-border dark:border-gpt-border text-xs">
-        <button type="button" id="viewSplitBtn" onclick="window.setViewMode('split')" class="view-btn px-3 py-1 rounded-lg font-medium bg-light-bg dark:bg-gpt-darker shadow-sm text-light-text dark:text-gpt-text cursor-pointer">Split View</button>
-        <button type="button" id="viewBrowserBtn" onclick="window.setViewMode('browser')" class="view-btn px-3 py-1 rounded-lg font-medium text-light-muted dark:text-gpt-muted hover:text-light-text dark:hover:text-gpt-text transition-colors cursor-pointer">Browser Focus</button>
-        <button type="button" id="viewChatBtn" onclick="window.setViewMode('chat')" class="view-btn px-3 py-1 rounded-lg font-medium text-light-muted dark:text-gpt-muted hover:text-light-text dark:hover:text-gpt-text transition-colors cursor-pointer">Agent Chat</button>
+      <div class="hidden md:flex items-center p-1 rounded-xl bg-slate-100 dark:bg-gpt-card border border-slate-200 dark:border-gpt-border text-xs gap-1">
+        <button type="button" id="viewSplitBtn" onclick="window.setViewMode('split')" class="view-btn active px-3 py-1.5 rounded-lg font-medium transition-all duration-200 cursor-pointer">Split View</button>
+        <button type="button" id="viewBrowserBtn" onclick="window.setViewMode('browser')" class="view-btn px-3 py-1.5 rounded-lg font-medium text-light-muted dark:text-gpt-muted hover:text-light-text dark:hover:text-gpt-text transition-all duration-200 cursor-pointer border border-transparent">Browser Focus</button>
+        <button type="button" id="viewChatBtn" onclick="window.setViewMode('chat')" class="view-btn px-3 py-1.5 rounded-lg font-medium text-light-muted dark:text-gpt-muted hover:text-light-text dark:hover:text-gpt-text transition-all duration-200 cursor-pointer border border-transparent">Agent Chat</button>
       </div>
 
       <!-- Right Actions -->
@@ -196,29 +260,28 @@ export function getDashboardHtml(): string {
     <div id="splitWorkspace" class="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0 relative">
       
       <!-- LEFT PANE: Chat & Actions -->
-      <section id="chatPane" class="w-full lg:w-1/2 flex flex-col h-full border-r border-light-border dark:border-gpt-border bg-light-bg dark:bg-gpt-dark relative min-w-0">
+      <section id="chatPane" class="w-full lg:w-1/2 flex flex-col h-full border-r border-light-border dark:border-gpt-border bg-light-bg dark:bg-gpt-dark relative min-w-0 transition-all duration-300 ease-in-out">
         
-        <div id="chatFeed" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-          
-          <!-- Welcome Prompt -->
-          <div class="flex items-start gap-3.5 max-w-3xl">
-            <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-500 flex-shrink-0 flex items-center justify-center text-white font-semibold text-xs shadow-sm">
-              AI
-            </div>
-            <div class="flex-1 space-y-2">
-              <div class="font-medium text-xs text-light-muted dark:text-gpt-muted">BrowserAgent Assistant</div>
-              <div class="text-sm leading-relaxed p-4 rounded-2xl bg-light-card dark:bg-gpt-card text-light-text dark:text-gpt-text shadow-sm border border-light-border dark:border-gpt-border">
-                Welcome to <strong>BrowserAgent Studio</strong>. Enter any web task prompt below. The model will analyze & learn your prompt strategy first, then navigate the web autonomously.
+        <div id="chatFeed" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 flex flex-col items-center">
+          <div id="chatFeedInner" class="max-w-3xl mx-auto w-full space-y-6 transition-all duration-300">
+            <!-- Welcome Prompt -->
+            <div class="flex items-start gap-3.5 w-full">
+              <img src="/logo.png" alt="BrowserAgent Logo" class="w-8 h-8 rounded-xl object-cover shadow-sm ring-1 ring-emerald-500/20 flex-shrink-0">
+              <div class="flex-1 space-y-2 min-w-0">
+                <div class="font-medium text-xs text-light-muted dark:text-gpt-muted">BrowserAgent Assistant</div>
+                <div class="text-sm leading-relaxed p-4 rounded-2xl bg-light-card dark:bg-gpt-card text-light-text dark:text-gpt-text shadow-sm border border-light-border dark:border-gpt-border">
+                  Welcome to <strong>BrowserAgent Studio</strong>. Enter any web task prompt below. The model will analyze & learn your prompt strategy first, then navigate the web autonomously.
+                </div>
               </div>
             </div>
-          </div>
 
-          <div id="dynamicChatSteps" class="space-y-4"></div>
+            <div id="dynamicChatSteps" class="space-y-4 w-full"></div>
+          </div>
         </div>
 
         <!-- Input Bar Container with High Z-Index & Pointer-Events -->
         <div class="p-4 bg-light-bg dark:bg-gpt-dark border-t border-light-border dark:border-gpt-border relative z-30 flex-shrink-0">
-          <div class="max-w-3xl mx-auto space-y-2 relative z-30">
+          <div id="inputInner" class="max-w-3xl mx-auto space-y-2 relative z-30 transition-all duration-300">
             
             <!-- Quick Action Chips -->
             <div class="flex items-center gap-2 overflow-x-auto pb-1 text-xs no-scrollbar relative z-30">
@@ -253,10 +316,6 @@ export function getDashboardHtml(): string {
                   </button>
                 </div>
               </div>
-            </div>
-
-            <div class="text-center text-[11px] text-light-muted dark:text-gpt-muted">
-              BrowserAgent executes autonomous browser actions via Playwright & OpenRouter.
             </div>
           </div>
         </div>
@@ -527,10 +586,10 @@ export function getDashboardHtml(): string {
             container.innerHTML = '';
 
             var userBubble = document.createElement('div');
-            userBubble.className = "flex items-start gap-3.5 max-w-3xl";
+            userBubble.className = "flex items-start gap-3.5 w-full";
             userBubble.innerHTML =
-              '<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-500 flex-shrink-0 flex items-center justify-center text-white font-semibold text-xs shadow-sm">U</div>' +
-              '<div class="flex-1 space-y-2">' +
+              '<div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-500 to-indigo-500 flex-shrink-0 flex items-center justify-center text-white font-semibold text-xs shadow-sm">U</div>' +
+              '<div class="flex-1 space-y-2 min-w-0">' +
                 '<div class="font-medium text-xs text-light-muted dark:text-gpt-muted">You</div>' +
                 '<div class="text-sm leading-relaxed p-3.5 rounded-2xl bg-light-card dark:bg-gpt-card text-light-text dark:text-gpt-text shadow-sm border border-light-border dark:border-gpt-border">' + window.esc(session.goal) + '</div>' +
                 (session.initialUrl ? '<div class="flex items-center gap-1.5 text-xs text-light-muted dark:text-gpt-muted"><span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-light-card dark:bg-gpt-card border border-light-border dark:border-gpt-border font-mono text-[11px] text-emerald-600 dark:text-emerald-400">🌐 ' + window.esc(session.initialUrl) + '</span></div>' : '') +
@@ -543,18 +602,18 @@ export function getDashboardHtml(): string {
                 var isLearn = toolName === 'learn_prompt';
 
                 var card = document.createElement('div');
-                card.className = "flex items-start gap-3.5 max-w-3xl";
+                card.className = "flex items-start gap-3.5 w-full";
 
                 var badgeHtml = isLearn
                   ? '<span class="learn-badge">🧠 Learn Prompt Strategy</span>'
-                  : '<span class="font-mono text-xs text-emerald-500 font-bold">#' + (d.stepNumber || (index + 1)) + ' ' + window.esc(toolName) + '</span>';
+                  : '<span class="font-mono text-xs text-emerald-600 dark:text-emerald-400 font-bold">#' + (d.stepNumber || (index + 1)) + ' ' + window.esc(toolName) + '</span>';
 
                 var descHtml = isLearn
                   ? '<div class="step-desc-full">' + window.formatResultText((d.thought ? d.thought + '\\n\\n' : '') + (d.output || '')) + '</div>'
-                  : '<div class="text-xs text-light-muted dark:text-gpt-muted mt-1">' + window.esc(d.thought || d.output || '') + '</div>';
+                  : '<div class="text-xs text-slate-700 dark:text-gpt-text font-medium mt-1">' + window.esc(d.thought || d.output || '') + '</div>';
 
                 card.innerHTML =
-                  '<div class="w-8 h-8 rounded-full bg-emerald-600 flex-shrink-0 flex items-center justify-center text-white shadow-sm font-bold text-xs">🤖</div>' +
+                  '<img src="/logo.png" alt="BrowserAgent" class="w-8 h-8 rounded-xl object-cover shadow-sm ring-1 ring-emerald-500/20 flex-shrink-0">' +
                   '<div class="flex-1 space-y-1.5 min-w-0">' +
                     '<div class="flex items-center justify-between">' + badgeHtml + '<span class="text-[10px] font-mono text-light-muted dark:text-gpt-muted">' + (d.timestamp ? new Date(d.timestamp).toLocaleTimeString() : '') + '</span></div>' +
                     descHtml +
@@ -565,12 +624,12 @@ export function getDashboardHtml(): string {
 
             if (session.finalAnswer || session.summary) {
               var doneBubble = document.createElement('div');
-              doneBubble.className = "flex items-start gap-3.5 max-w-3xl";
+              doneBubble.className = "flex items-start gap-3.5 w-full";
               doneBubble.innerHTML =
-                '<div class="w-8 h-8 rounded-full bg-emerald-600 flex-shrink-0 flex items-center justify-center text-white shadow-sm font-bold text-xs">✨</div>' +
+                '<img src="/logo.png" alt="BrowserAgent" class="w-8 h-8 rounded-xl object-cover shadow-sm ring-1 ring-emerald-500/20 flex-shrink-0">' +
                 '<div class="flex-1 space-y-2 min-w-0">' +
-                  '<div class="text-xs font-bold text-emerald-500 uppercase tracking-wider">Final Result</div>' +
-                  '<div class="text-sm p-4 rounded-2xl bg-light-card dark:bg-gpt-card border border-light-border dark:border-gpt-border text-light-text dark:text-gpt-text leading-relaxed whitespace-pre-wrap">' + window.formatResultText(session.finalAnswer || session.summary) + '</div>' +
+                  '<div class="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Final Result</div>' +
+                  '<div class="text-sm p-4 rounded-2xl bg-light-card dark:bg-gpt-card border border-light-border dark:border-gpt-border text-light-text dark:text-gpt-text leading-relaxed whitespace-pre-wrap shadow-sm">' + window.formatResultText(session.finalAnswer || session.summary) + '</div>' +
                 '</div>';
               container.appendChild(doneBubble);
             }
@@ -579,10 +638,10 @@ export function getDashboardHtml(): string {
           var rb = document.getElementById('resBadge');
           if (rb) {
             if (session.status === 'completed') {
-              rb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+              rb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30';
               rb.innerHTML = '✅ Task Completed Successfully';
             } else if (session.status === 'failed') {
-              rb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30';
+              rb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30';
               rb.innerHTML = '❌ Task Failed';
             }
           }
@@ -640,7 +699,6 @@ export function getDashboardHtml(): string {
       window.showToast('Ready for new task');
     };
 
-
     window.toggleUrlContainer = function(show) {
       var container = document.getElementById('urlInputContainer');
       if (!container) return;
@@ -662,54 +720,79 @@ export function getDashboardHtml(): string {
 
     window.switchCanvasTab = function(tab) {
       window.state.activeCanvasTab = tab;
-      var btns = [document.getElementById('tabLiveBtn'), document.getElementById('tabResultBtn'), document.getElementById('tabDomBtn'), document.getElementById('tabDataBtn')];
-      var tabs = [document.getElementById('viewLiveTab'), document.getElementById('viewResultTab'), document.getElementById('viewDomTab'), document.getElementById('viewDataTab')];
+      var tabMap = [
+        { id: 'live', btn: document.getElementById('tabLiveBtn'), view: document.getElementById('viewLiveTab') },
+        { id: 'result', btn: document.getElementById('tabResultBtn'), view: document.getElementById('viewResultTab') },
+        { id: 'dom', btn: document.getElementById('tabDomBtn'), view: document.getElementById('viewDomTab') },
+        { id: 'data', btn: document.getElementById('tabDataBtn'), view: document.getElementById('viewDataTab') }
+      ];
 
-      btns.forEach(function(b) {
-        if (!b) return;
-        b.classList.remove('bg-light-bg', 'dark:bg-gpt-darker', 'shadow-sm', 'text-light-text', 'dark:text-gpt-text');
-        b.classList.add('text-light-muted', 'dark:text-gpt-muted');
+      tabMap.forEach(function(item) {
+        if (item.btn) {
+          if (item.id === tab) {
+            item.btn.classList.add('active');
+            item.btn.classList.remove('text-light-muted', 'dark:text-gpt-muted');
+          } else {
+            item.btn.classList.remove('active');
+            item.btn.classList.add('text-light-muted', 'dark:text-gpt-muted');
+          }
+        }
+        if (item.view) {
+          if (item.id === tab) item.view.classList.remove('hidden');
+          else item.view.classList.add('hidden');
+        }
       });
-      tabs.forEach(function(t) { if (t) t.classList.add('hidden'); });
-
-      if (tab === 'live' && btns[0] && tabs[0]) {
-        btns[0].classList.add('bg-light-bg', 'dark:bg-gpt-darker', 'shadow-sm', 'text-light-text', 'dark:text-gpt-text');
-        tabs[0].classList.remove('hidden');
-      } else if (tab === 'result' && btns[1] && tabs[1]) {
-        btns[1].classList.add('bg-light-bg', 'dark:bg-gpt-darker', 'shadow-sm', 'text-light-text', 'dark:text-gpt-text');
-        tabs[1].classList.remove('hidden');
-      } else if (tab === 'dom' && btns[2] && tabs[2]) {
-        btns[2].classList.add('bg-light-bg', 'dark:bg-gpt-darker', 'shadow-sm', 'text-light-text', 'dark:text-gpt-text');
-        tabs[2].classList.remove('hidden');
-      } else if (tab === 'data' && btns[3] && tabs[3]) {
-        btns[3].classList.add('bg-light-bg', 'dark:bg-gpt-darker', 'shadow-sm', 'text-light-text', 'dark:text-gpt-text');
-        tabs[3].classList.remove('hidden');
-      }
     };
 
     window.setViewMode = function(mode) {
       window.state.currentView = mode;
-      var chat = document.getElementById('chatPane');
-      var browser = document.getElementById('browserPane');
-      var btns = [document.getElementById('viewSplitBtn'), document.getElementById('viewBrowserBtn'), document.getElementById('viewChatBtn')];
-      btns.forEach(function(b) {
-        if (!b) return;
-        b.classList.remove('bg-light-bg', 'dark:bg-gpt-darker', 'shadow-sm', 'text-light-text', 'dark:text-gpt-text');
-        b.classList.add('text-light-muted', 'dark:text-gpt-muted');
+      var chatPane = document.getElementById('chatPane');
+      var browserPane = document.getElementById('browserPane');
+      var chatFeedInner = document.getElementById('chatFeedInner');
+      var inputInner = document.getElementById('inputInner');
+
+      var btnMap = [
+        { id: 'split', btn: document.getElementById('viewSplitBtn') },
+        { id: 'browser', btn: document.getElementById('viewBrowserBtn') },
+        { id: 'chat', btn: document.getElementById('viewChatBtn') }
+      ];
+
+      btnMap.forEach(function(item) {
+        if (!item.btn) return;
+        if (item.id === mode) {
+          item.btn.classList.add('active');
+          item.btn.classList.remove('text-light-muted', 'dark:text-gpt-muted');
+        } else {
+          item.btn.classList.remove('active');
+          item.btn.classList.add('text-light-muted', 'dark:text-gpt-muted');
+        }
       });
 
+      if (!chatPane || !browserPane) return;
+
       if (mode === 'split') {
-        if (btns[0]) btns[0].classList.add('bg-light-bg', 'dark:bg-gpt-darker', 'shadow-sm', 'text-light-text', 'dark:text-gpt-text');
-        if (chat) chat.className = "w-full lg:w-1/2 flex flex-col h-full border-r border-light-border dark:border-gpt-border bg-light-bg dark:bg-gpt-dark relative min-w-0";
-        if (browser) browser.className = "w-full lg:w-1/2 flex flex-col h-full bg-light-card/40 dark:bg-gpt-darker relative overflow-hidden min-w-0";
+        chatPane.classList.remove('hidden');
+        chatPane.className = "w-full lg:w-1/2 flex flex-col h-full border-r border-light-border dark:border-gpt-border bg-light-bg dark:bg-gpt-dark relative min-w-0 transition-all duration-300 ease-in-out";
+        
+        browserPane.classList.remove('hidden');
+        browserPane.className = "w-full lg:w-1/2 flex flex-col h-full bg-light-card/40 dark:bg-gpt-darker relative overflow-hidden min-w-0 transition-all duration-300 ease-in-out";
+
+        if (chatFeedInner) chatFeedInner.className = "max-w-3xl mx-auto w-full space-y-6 transition-all duration-300";
+        if (inputInner) inputInner.className = "max-w-3xl mx-auto space-y-2 relative z-30 transition-all duration-300";
       } else if (mode === 'browser') {
-        if (btns[1]) btns[1].classList.add('bg-light-bg', 'dark:bg-gpt-darker', 'shadow-sm', 'text-light-text', 'dark:text-gpt-text');
-        if (chat) chat.className = "hidden";
-        if (browser) browser.className = "w-full flex flex-col h-full bg-light-card/40 dark:bg-gpt-darker relative overflow-hidden min-w-0";
-      } else {
-        if (btns[2]) btns[2].classList.add('bg-light-bg', 'dark:bg-gpt-darker', 'shadow-sm', 'text-light-text', 'dark:text-gpt-text');
-        if (chat) chat.className = "w-full flex flex-col h-full bg-light-bg dark:bg-gpt-dark relative min-w-0";
-        if (browser) browser.className = "hidden";
+        chatPane.classList.add('hidden');
+        
+        browserPane.classList.remove('hidden');
+        browserPane.className = "w-full flex-1 flex flex-col h-full bg-light-card/40 dark:bg-gpt-darker relative overflow-hidden min-w-0 transition-all duration-300 ease-in-out";
+      } else if (mode === 'chat') {
+        browserPane.classList.add('hidden');
+        
+        chatPane.classList.remove('hidden');
+        chatPane.className = "w-full flex-1 flex flex-col h-full border-r-0 bg-light-bg dark:bg-gpt-dark relative min-w-0 transition-all duration-300 ease-in-out";
+
+        // Center the chat feed & prompt input cleanly on screen (ChatGPT / Gemini style)
+        if (chatFeedInner) chatFeedInner.className = "max-w-3xl md:max-w-4xl mx-auto w-full space-y-6 transition-all duration-300";
+        if (inputInner) inputInner.className = "max-w-3xl md:max-w-4xl mx-auto space-y-2 relative z-30 transition-all duration-300";
       }
     };
 
@@ -851,10 +934,10 @@ export function getDashboardHtml(): string {
       var container = document.getElementById('dynamicChatSteps');
       if (container) {
         var userBubble = document.createElement('div');
-        userBubble.className = "flex items-start gap-3.5 max-w-3xl animate-in fade-in";
+        userBubble.className = "flex items-start gap-3.5 w-full animate-in fade-in";
         userBubble.innerHTML =
-          '<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-500 flex-shrink-0 flex items-center justify-center text-white font-semibold text-xs shadow-sm">U</div>' +
-          '<div class="flex-1 space-y-2">' +
+          '<div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-purple-500 to-indigo-500 flex-shrink-0 flex items-center justify-center text-white font-semibold text-xs shadow-sm">U</div>' +
+          '<div class="flex-1 space-y-2 min-w-0">' +
             '<div class="font-medium text-xs text-light-muted dark:text-gpt-muted">You</div>' +
             '<div class="text-sm leading-relaxed p-3.5 rounded-2xl bg-light-card dark:bg-gpt-card text-light-text dark:text-gpt-text shadow-sm border border-light-border dark:border-gpt-border">' + window.esc(d.goal) + '</div>' +
             (d.initialUrl ? '<div class="flex items-center gap-1.5 text-xs text-light-muted dark:text-gpt-muted"><span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-light-card dark:bg-gpt-card border border-light-border dark:border-gpt-border font-mono text-[11px] text-emerald-600 dark:text-emerald-400">🌐 ' + window.esc(d.initialUrl) + '</span></div>' : '') +
@@ -878,18 +961,18 @@ export function getDashboardHtml(): string {
         var isLearn = toolName === 'learn_prompt';
 
         var card = document.createElement('div');
-        card.className = "flex items-start gap-3.5 max-w-3xl animate-in fade-in";
+        card.className = "flex items-start gap-3.5 w-full animate-in fade-in";
 
         var badgeHtml = isLearn
           ? '<span class="learn-badge">🧠 Learn Prompt Strategy</span>'
-          : '<span class="font-mono text-xs text-emerald-500 font-bold">#' + window.state.stepCount + ' ' + window.esc(toolName) + '</span>';
+          : '<span class="font-mono text-xs text-emerald-600 dark:text-emerald-400 font-bold">#' + window.state.stepCount + ' ' + window.esc(toolName) + '</span>';
 
         var descHtml = isLearn
           ? '<div class="step-desc-full">' + window.formatResultText((d.thought ? d.thought + '\\n\\n' : '') + (d.output || '')) + '</div>'
-          : '<div class="text-xs text-light-muted dark:text-gpt-muted mt-1">' + window.esc(d.thought || d.output || '') + '</div>';
+          : '<div class="text-xs text-slate-700 dark:text-gpt-text font-medium mt-1">' + window.esc(d.thought || d.output || '') + '</div>';
 
         card.innerHTML =
-          '<div class="w-8 h-8 rounded-full bg-emerald-600 flex-shrink-0 flex items-center justify-center text-white shadow-sm font-bold text-xs">🤖</div>' +
+          '<img src="/logo.png" alt="BrowserAgent" class="w-8 h-8 rounded-xl object-cover shadow-sm ring-1 ring-emerald-500/20 flex-shrink-0">' +
           '<div class="flex-1 space-y-1.5 min-w-0">' +
             '<div class="flex items-center justify-between">' + badgeHtml + '<span class="text-[10px] font-mono text-light-muted dark:text-gpt-muted">' + new Date(d.timestamp || Date.now()).toLocaleTimeString() + '</span></div>' +
             descHtml +
@@ -938,7 +1021,7 @@ export function getDashboardHtml(): string {
 
       var rb = document.getElementById('resBadge');
       if (rb) {
-        rb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+        rb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30';
         rb.innerHTML = '✅ Task Completed Successfully';
       }
       var gt = document.getElementById('resGoalTitle'); if (gt) gt.textContent = d.goal ? ('Goal: ' + d.goal) : 'Task Completed';
@@ -950,12 +1033,12 @@ export function getDashboardHtml(): string {
       var container = document.getElementById('dynamicChatSteps');
       if (container) {
         var doneBubble = document.createElement('div');
-        doneBubble.className = "flex items-start gap-3.5 max-w-3xl animate-in fade-in";
+        doneBubble.className = "flex items-start gap-3.5 w-full animate-in fade-in";
         doneBubble.innerHTML =
-          '<div class="w-8 h-8 rounded-full bg-emerald-600 flex-shrink-0 flex items-center justify-center text-white shadow-sm font-bold text-xs">✨</div>' +
+          '<img src="/logo.png" alt="BrowserAgent" class="w-8 h-8 rounded-xl object-cover shadow-sm ring-1 ring-emerald-500/20 flex-shrink-0">' +
           '<div class="flex-1 space-y-2 min-w-0">' +
-            '<div class="text-xs font-bold text-emerald-500 uppercase tracking-wider">Final Result</div>' +
-            '<div class="text-sm p-4 rounded-2xl bg-light-card dark:bg-gpt-card border border-light-border dark:border-gpt-border text-light-text dark:text-gpt-text leading-relaxed whitespace-pre-wrap">' + window.formatResultText(d.finalAnswer || d.summary || 'Completed.') + '</div>' +
+            '<div class="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Final Result</div>' +
+            '<div class="text-sm p-4 rounded-2xl bg-light-card dark:bg-gpt-card border border-light-border dark:border-gpt-border text-light-text dark:text-gpt-text leading-relaxed whitespace-pre-wrap shadow-sm">' + window.formatResultText(d.finalAnswer || d.summary || 'Completed.') + '</div>' +
           '</div>';
         container.appendChild(doneBubble);
         var chatFeed = document.getElementById('chatFeed');

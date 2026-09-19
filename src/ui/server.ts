@@ -99,7 +99,17 @@ export function startDashboardServer(options: ServerOptions = {}): http.Server {
       return;
     }
 
-    // 2. Serve Screenshots (PNG and JPEG)
+    // 2. Serve Screenshots and Static Assets (Logo, Favicon, etc.)
+    if (pathname === '/logo.png' || pathname === '/logo.jpg' || pathname === '/favicon.ico') {
+      const publicPath = path.resolve(process.cwd(), 'public', pathname === '/favicon.ico' ? 'logo.png' : path.basename(pathname));
+      if (fs.existsSync(publicPath)) {
+        const contentType = publicPath.endsWith('.jpg') || publicPath.endsWith('.jpeg') ? 'image/jpeg' : 'image/png';
+        res.writeHead(200, { 'Content-Type': contentType });
+        fs.createReadStream(publicPath).pipe(res);
+        return;
+      }
+    }
+
     if (pathname.startsWith('/screenshots/')) {
       const filename = path.basename(pathname);
       const filePath = path.resolve(process.cwd(), 'screenshots', filename);
