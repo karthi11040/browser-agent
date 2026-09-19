@@ -9,6 +9,10 @@
 
 An enterprise-grade autonomous web automation agent and interactive web studio built upon the specifications in [deep-research-report.md](./deep-research-report.md). BrowserAgent bridges LLMs (via the **OpenRouter API**) with modern browser automation (**Playwright**) using **Semantic Accessibility Snapshots**, **Bounding-Box Coordinate Interactions**, and **Live Viewport Streaming**.
 
+<p align="center">
+  <img src="docs/assets/web-studio-preview.png" alt="BrowserAgent Autonomous Web Studio Dashboard" width="100%" />
+</p>
+
 ---
 
 ## 🌟 Core Architecture & Key Features
@@ -143,9 +147,9 @@ SLOW_MO_MS=50
 
 ---
 
-## 🖥 Launching the Web Studio Dashboard
+## 🖥 Launching the Web Studio Dashboard (`npm run ui`)
 
-To start the visual web dashboard:
+Launch the visual web dashboard with one simple command:
 
 ```bash
 npm run ui
@@ -156,12 +160,17 @@ npm run dev
 Open your browser at:
 👉 **`http://localhost:3000`**
 
-You can:
-- Enter goals in natural language with optional initial target URLs.
-- Click quick prompt chips (e.g., "Chennai to Vellore Tickets", "Quantum Computing Wiki").
-- Watch the agent operate in the live streaming viewport.
-- Inspect the live ARIA snapshot tree in the **DOM** tab.
-- Copy execution traces and JSON artifacts in the **Data** tab.
+<p align="center">
+  <img src="docs/assets/web-studio-result.png" alt="BrowserAgent Web Studio Task Results" width="100%" />
+</p>
+
+### What You Can Do in the Web Studio:
+- 🚀 **Natural Language Task Execution:** Enter any browsing goal with an optional starting URL.
+- ⚡ **Quick Action Chips & History:** Preset task shortcuts and persistent `localStorage` history for instant re-runs.
+- 🌐 **Live 800ms Viewport Feed:** Real-time visual canvas synchronized with the agent's browser navigation.
+- 🧠 **Strategy & Step Inspector:** Review prompt understanding, execution strategy plans, bounding-box click coordinates, and thoughts.
+- 🎯 **DOM Accessibility Tree:** Switch to the **DOM** tab to see the compact ARIA tree representation in real time.
+- 📊 **Structured Final Answers:** Formatted summaries, source citations, and raw JSON artifacts in the **Data** tab.
 
 ---
 
