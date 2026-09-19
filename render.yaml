@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: browser-agent
+    runtime: docker
+    plan: starter
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: HEADLESS
+        value: "true"
+      - key: NODE_ENV
+        value: "production"
+      - key: ALLOWED_DOMAINS
+        value: "*"
+      - key: OPENROUTER_MODEL
+        value: "deepseek/deepseek-v4-flash-0731:free"
+      - key: OPENROUTER_API_KEY
+        sync: false
