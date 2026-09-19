@@ -1,0 +1,12 @@
+services:
+  agent:
+    build: .
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-anthropic/claude-3.5-sonnet}
+      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-*}
+      - HEADLESS=true
+    volumes:
+      - ./.sessions:/app/.sessions
+      - ./screenshots:/app/screenshots
+    command: ["run", "Search for latest AI agent news", "--url", "https://news.ycombinator.com"]

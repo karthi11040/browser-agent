@@ -1,0 +1,46 @@
+{
+  "name": "browser-agent",
+  "version": "1.0.0",
+  "description": "Autonomous LLM-driven Web Automation Browser Agent using OpenRouter, Playwright, and Accessibility Snapshots",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "agent": "./bin/agent.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "agent": "tsx bin/agent.ts",
+    "ui": "tsx bin/agent.ts ui",
+    "dev": "tsx bin/agent.ts ui",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai-agent",
+    "browser-automation",
+    "playwright",
+    "openrouter",
+    "accessibility-snapshot",
+    "llm",
+    "autonomous-agent"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0",
+    "dotenv": "^16.4.7",
+    "openai": "^4.86.1",
+    "ora": "^8.2.0",
+    "playwright": "^1.50.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.7"
+  }
+}
