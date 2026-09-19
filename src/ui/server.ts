@@ -2,6 +2,7 @@ import 'dotenv/config';
 import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { exec } from 'node:child_process';
 import chalk from 'chalk';
 import { BrowserManager } from '../browser/BrowserManager.js';
@@ -9,6 +10,13 @@ import { OpenRouterClient } from '../llm/OpenRouterClient.js';
 import { SecurityPolicy } from '../security/SecurityPolicy.js';
 import { AgentLoop, type AgentStepRecord, type AgentRunResult } from '../agent/AgentLoop.js';
 import { getDashboardHtml } from './dashboard.js';
+import {
+  saveChatSession,
+  getChatSession,
+  listChatSessions,
+  initializeDefaultChat,
+  type ChatSession,
+} from './chatStorage.js';
 
 export interface ServerOptions {
   port?: number;
@@ -19,8 +27,11 @@ export function startDashboardServer(options: ServerOptions = {}): http.Server {
   const port = options.port || 3000;
   const openBrowser = options.openBrowser ?? true;
 
+  initializeDefaultChat();
+
   let activeAgentLoop: AgentLoop | null = null;
   let activeBrowserManager: BrowserManager | null = null;
+  let currentRunningSession: ChatSession | null = null;
   let isRunning = false;
   let liveCaptureInterval: ReturnType<typeof setInterval> | null = null;
   const sseClients: http.ServerResponse[] = [];
@@ -123,12 +134,39 @@ export function startDashboardServer(options: ServerOptions = {}): http.Server {
       return;
     }
 
-    // 4. API: Stop Run
+    // 4. API: List Saved Chats
+    if (pathname === '/api/chats' && req.method === 'GET') {
+      const chats = listChatSessions();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ chats }));
+      return;
+    }
+
+    // 5. API: Get Single Chat Session by ID
+    if (pathname.startsWith('/api/chats/') && req.method === 'GET') {
+      const chatId = pathname.replace('/api/chats/', '').trim();
+      const session = getChatSession(chatId);
+      if (session) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(session));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Chat not found' }));
+      }
+      return;
+    }
+
+    // 6. API: Stop Run
     if (pathname === '/api/stop' && req.method === 'POST') {
       if (activeBrowserManager) {
         await activeBrowserManager.close().catch(() => {});
       }
       isRunning = false;
+      if (currentRunningSession) {
+        currentRunningSession.status = 'stopped';
+        currentRunningSession.updatedAt = new Date().toISOString();
+        saveChatSession(currentRunningSession);
+      }
       broadcastSSE('status', { isRunning: false, message: 'Execution stopped by user.' });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, message: 'Agent execution halted.' }));
@@ -167,12 +205,27 @@ export function startDashboardServer(options: ServerOptions = {}): http.Server {
             return;
           }
 
+          const chatId = params.chatId || randomUUID();
+
+          const currentSession: ChatSession = {
+            id: chatId,
+            goal,
+            initialUrl,
+            model,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            status: 'running',
+            steps: [],
+          };
+          saveChatSession(currentSession);
+          currentRunningSession = currentSession;
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, message: 'Agent run initiated.' }));
+          res.end(JSON.stringify({ ok: true, chatId, message: 'Agent run initiated.' }));
 
           // Begin background execution
           isRunning = true;
-          broadcastSSE('start', { goal, initialUrl, model, headless });
+          broadcastSSE('start', { chatId, goal, initialUrl, model, headless });
 
           const securityPolicy = new SecurityPolicy({
             allowedDomains: params.allowedDomains || '*',
@@ -214,6 +267,13 @@ export function startDashboardServer(options: ServerOptions = {}): http.Server {
                 const snapshot = agent.getSnapshotEngine().getLatestSnapshot();
                 const screenshotUrl = step.screenshotPath ? `/screenshots/${path.basename(step.screenshotPath)}` : undefined;
 
+                currentSession.steps.push(step);
+                currentSession.updatedAt = new Date().toISOString();
+                if (snapshot?.treeText) {
+                  currentSession.snapshotTree = snapshot.treeText;
+                }
+                saveChatSession(currentSession);
+
                 broadcastSSE('step', {
                   ...step,
                   screenshotUrl,
@@ -222,15 +282,29 @@ export function startDashboardServer(options: ServerOptions = {}): http.Server {
               },
             });
 
-            broadcastSSE('done', result);
+            currentSession.status = 'completed';
+            currentSession.finalAnswer = result.finalAnswer;
+            currentSession.summary = result.summary;
+            currentSession.totalTokens = result.totalTokens;
+            currentSession.durationMs = result.durationMs;
+            currentSession.updatedAt = new Date().toISOString();
+            saveChatSession(currentSession);
+
+            broadcastSSE('done', { ...result, chatId });
           } catch (err: any) {
-            broadcastSSE('error', { message: err?.message || String(err) });
+            currentSession.status = 'failed';
+            currentSession.error = err?.message || String(err);
+            currentSession.updatedAt = new Date().toISOString();
+            saveChatSession(currentSession);
+
+            broadcastSSE('error', { message: err?.message || String(err), chatId });
           } finally {
             stopLiveCapture();
             isRunning = false;
             await browserManager.close().catch(() => {});
             activeBrowserManager = null;
             activeAgentLoop = null;
+            currentRunningSession = null;
           }
         } catch (e: any) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -240,8 +314,8 @@ export function startDashboardServer(options: ServerOptions = {}): http.Server {
       return;
     }
 
-    // 6. Serve Frontend Dashboard HTML
-    if (pathname === '/' || pathname === '/index.html') {
+    // 7. Serve Frontend Dashboard HTML (Root & /chat/agent/:id)
+    if (pathname === '/' || pathname === '/index.html' || pathname.startsWith('/chat/agent/')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(getDashboardHtml());
       return;

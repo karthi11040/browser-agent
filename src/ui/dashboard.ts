@@ -451,67 +451,195 @@ export function getDashboardHtml(): string {
       window.executeTaskRun();
     };
 
-    window.selectHistoryItem = function(task, url) {
-      var input = document.getElementById('taskPromptInput');
-      var urlInput = document.getElementById('startUrlInput');
-      if (input) {
-        input.value = task;
-        input.focus();
+    window.openChat = function(chatId) {
+      if (!chatId) return;
+      if (window.location.pathname !== '/chat/agent/' + chatId) {
+        history.pushState({ chatId: chatId }, '', '/chat/agent/' + chatId);
       }
-      if (urlInput) urlInput.value = url || '';
-      var container = document.getElementById('urlInputContainer');
-      if (container) {
-        if (url) container.classList.remove('hidden');
-        else container.classList.add('hidden');
-      }
-      window.showToast('Prompt loaded from history');
+      window.loadChatSession(chatId);
     };
 
-    window.addToHistory = function(goal, url) {
-      if (!goal) return;
-      try {
-        var hist = JSON.parse(localStorage.getItem('ba_history') || '[]');
-        hist = hist.filter(function(h) { return h.goal !== goal; });
-        hist.unshift({ goal: goal, url: url, timestamp: Date.now() });
-        if (hist.length > 20) hist.pop();
-        localStorage.setItem('ba_history', JSON.stringify(hist));
-        window.renderHistory();
-      } catch(e) {}
+    window.loadRecentChats = function() {
+      fetch('/api/chats')
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (!data || !data.chats) return;
+          var list = document.getElementById('historyList');
+          if (!list) return;
+          list.innerHTML = '';
+          var curPath = window.location.pathname;
+          var curId = curPath.indexOf('/chat/agent/') !== -1 ? curPath.split('/chat/agent/')[1].split('/')[0] : '';
+
+          data.chats.forEach(function(chat) {
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            var isActive = (chat.id === curId);
+            btn.className = 'history-item cursor-pointer w-full flex items-center justify-between px-3 py-2 rounded-lg text-left transition-colors group ' +
+              (isActive ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-light-muted dark:text-gpt-muted hover:bg-light-card dark:hover:bg-gpt-card hover:text-light-text dark:hover:text-gpt-text');
+            btn.innerHTML = '<div class="flex items-center gap-2 truncate">' +
+              '<span class="text-xs">' + (chat.status === 'completed' ? '✅' : chat.status === 'running' ? '⏳' : '⚡') + '</span>' +
+              '<span class="truncate">' + window.esc(chat.goal) + '</span>' +
+              '</div>' +
+              (isActive ? '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></span>' : '');
+            btn.onclick = function() {
+              window.openChat(chat.id);
+            };
+            list.appendChild(btn);
+          });
+        })
+        .catch(function() {});
     };
 
-    window.renderHistory = function() {
-      try {
-        var list = document.getElementById('historyList');
-        if (!list) return;
-        var hist = JSON.parse(localStorage.getItem('ba_history') || '[]');
-        if (!hist || !hist.length) {
-          hist = [
-            { goal: 'search for tickets from chennai to vellore', url: 'https://www.google.com' },
-            { goal: 'Search Wikipedia for quantum computing and summarize key concepts', url: 'https://en.wikipedia.org/wiki/Quantum_computing' }
-          ];
-        }
-        list.innerHTML = '';
-        hist.forEach(function(item) {
-          var btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'history-item cursor-pointer w-full flex items-center justify-between px-3 py-2 rounded-lg text-left hover:bg-light-card dark:hover:bg-gpt-card text-light-muted dark:text-gpt-muted hover:text-light-text dark:hover:text-gpt-text transition-colors group';
-          btn.innerHTML = '<div class="flex items-center gap-2 truncate"><span class="text-xs">⚡</span><span class="truncate">' + window.esc(item.goal) + '</span></div>';
-          btn.onclick = function() {
-            window.selectHistoryItem(item.goal, item.url);
-          };
-          list.appendChild(btn);
+    window.loadChatSession = function(chatId) {
+      fetch('/api/chats/' + encodeURIComponent(chatId))
+        .then(function(res) {
+          if (!res.ok) throw new Error('Chat session not found');
+          return res.json();
+        })
+        .then(function(session) {
+          if (!session) return;
+          window.state.currentChatId = session.id;
+
+          var promptInput = document.getElementById('taskPromptInput');
+          if (promptInput) promptInput.value = session.goal || '';
+
+          var urlInput = document.getElementById('startUrlInput');
+          var urlContainer = document.getElementById('urlInputContainer');
+          if (urlInput && urlContainer) {
+            if (session.initialUrl) {
+              urlInput.value = session.initialUrl;
+              urlContainer.classList.remove('hidden');
+            } else {
+              urlInput.value = '';
+              urlContainer.classList.add('hidden');
+            }
+          }
+
+          var stepMetric = document.getElementById('metricSteps');
+          if (stepMetric) stepMetric.textContent = session.steps ? session.steps.length : '0';
+          var elapsedMetric = document.getElementById('metricElapsed');
+          if (elapsedMetric) {
+            elapsedMetric.textContent = session.durationMs ? ((session.durationMs / 1000).toFixed(1) + 's') : '0.0s';
+          }
+
+          var container = document.getElementById('dynamicChatSteps');
+          if (container) {
+            container.innerHTML = '';
+
+            var userBubble = document.createElement('div');
+            userBubble.className = "flex items-start gap-3.5 max-w-3xl";
+            userBubble.innerHTML =
+              '<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-indigo-500 flex-shrink-0 flex items-center justify-center text-white font-semibold text-xs shadow-sm">U</div>' +
+              '<div class="flex-1 space-y-2">' +
+                '<div class="font-medium text-xs text-light-muted dark:text-gpt-muted">You</div>' +
+                '<div class="text-sm leading-relaxed p-3.5 rounded-2xl bg-light-card dark:bg-gpt-card text-light-text dark:text-gpt-text shadow-sm border border-light-border dark:border-gpt-border">' + window.esc(session.goal) + '</div>' +
+                (session.initialUrl ? '<div class="flex items-center gap-1.5 text-xs text-light-muted dark:text-gpt-muted"><span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-light-card dark:bg-gpt-card border border-light-border dark:border-gpt-border font-mono text-[11px] text-emerald-600 dark:text-emerald-400">🌐 ' + window.esc(session.initialUrl) + '</span></div>' : '') +
+              '</div>';
+            container.appendChild(userBubble);
+
+            if (session.steps && session.steps.length) {
+              session.steps.forEach(function(d, index) {
+                var toolName = d.toolName || d.tool || 'Action';
+                var isLearn = toolName === 'learn_prompt';
+
+                var card = document.createElement('div');
+                card.className = "flex items-start gap-3.5 max-w-3xl";
+
+                var badgeHtml = isLearn
+                  ? '<span class="learn-badge">🧠 Learn Prompt Strategy</span>'
+                  : '<span class="font-mono text-xs text-emerald-500 font-bold">#' + (d.stepNumber || (index + 1)) + ' ' + window.esc(toolName) + '</span>';
+
+                var descHtml = isLearn
+                  ? '<div class="step-desc-full">' + window.formatResultText((d.thought ? d.thought + '\\n\\n' : '') + (d.output || '')) + '</div>'
+                  : '<div class="text-xs text-light-muted dark:text-gpt-muted mt-1">' + window.esc(d.thought || d.output || '') + '</div>';
+
+                card.innerHTML =
+                  '<div class="w-8 h-8 rounded-full bg-emerald-600 flex-shrink-0 flex items-center justify-center text-white shadow-sm font-bold text-xs">🤖</div>' +
+                  '<div class="flex-1 space-y-1.5 min-w-0">' +
+                    '<div class="flex items-center justify-between">' + badgeHtml + '<span class="text-[10px] font-mono text-light-muted dark:text-gpt-muted">' + (d.timestamp ? new Date(d.timestamp).toLocaleTimeString() : '') + '</span></div>' +
+                    descHtml +
+                  '</div>';
+                container.appendChild(card);
+              });
+            }
+
+            if (session.finalAnswer || session.summary) {
+              var doneBubble = document.createElement('div');
+              doneBubble.className = "flex items-start gap-3.5 max-w-3xl";
+              doneBubble.innerHTML =
+                '<div class="w-8 h-8 rounded-full bg-emerald-600 flex-shrink-0 flex items-center justify-center text-white shadow-sm font-bold text-xs">✨</div>' +
+                '<div class="flex-1 space-y-2 min-w-0">' +
+                  '<div class="text-xs font-bold text-emerald-500 uppercase tracking-wider">Final Result</div>' +
+                  '<div class="text-sm p-4 rounded-2xl bg-light-card dark:bg-gpt-card border border-light-border dark:border-gpt-border text-light-text dark:text-gpt-text leading-relaxed whitespace-pre-wrap">' + window.formatResultText(session.finalAnswer || session.summary) + '</div>' +
+                '</div>';
+              container.appendChild(doneBubble);
+            }
+          }
+
+          var rb = document.getElementById('resBadge');
+          if (rb) {
+            if (session.status === 'completed') {
+              rb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+              rb.innerHTML = '✅ Task Completed Successfully';
+            } else if (session.status === 'failed') {
+              rb.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30';
+              rb.innerHTML = '❌ Task Failed';
+            }
+          }
+          var gt = document.getElementById('resGoalTitle');
+          if (gt) gt.textContent = session.goal ? ('Goal: ' + session.goal) : 'Task Overview';
+          var mi = document.getElementById('resMetaInfo');
+          if (mi) mi.textContent = 'Total Steps: ' + (session.steps ? session.steps.length : 0) + ' | Duration: ' + Math.round((session.durationMs || 0)/1000) + 's';
+          var tc = document.getElementById('resTextContent');
+          if (tc) tc.innerHTML = window.formatResultText(session.finalAnswer || session.summary || 'Session recorded.');
+
+          if (session.snapshotTree) {
+            var domViewer = document.getElementById('domTreeViewer');
+            if (domViewer) domViewer.textContent = session.snapshotTree;
+          }
+
+          var jv = document.getElementById('jsonViewer');
+          if (jv) jv.textContent = JSON.stringify(session, null, 2);
+
+          if (session.finalAnswer || session.summary) {
+            window.switchCanvasTab('result');
+          }
+
+          window.loadRecentChats();
+          window.showToast('Loaded chat session');
+        })
+        .catch(function(err) {
+          window.showToast('Failed to load chat: ' + err.message);
         });
-      } catch(e) {}
     };
 
     window.prepareNewTask = function() {
+      if (window.location.pathname !== '/') {
+        history.pushState(null, '', '/');
+      }
       var input = document.getElementById('taskPromptInput');
       if (input) {
         input.value = '';
         input.focus();
       }
+      var urlInput = document.getElementById('startUrlInput');
+      if (urlInput) urlInput.value = '';
+      var container = document.getElementById('urlInputContainer');
+      if (container) container.classList.add('hidden');
+
+      var chatSteps = document.getElementById('dynamicChatSteps');
+      if (chatSteps) chatSteps.innerHTML = '';
+
+      var stepMetric = document.getElementById('metricSteps');
+      if (stepMetric) stepMetric.textContent = '0';
+      var elapsedMetric = document.getElementById('metricElapsed');
+      if (elapsedMetric) elapsedMetric.textContent = '0.0s';
+
+      window.switchCanvasTab('live');
+      window.loadRecentChats();
       window.showToast('Ready for new task');
     };
+
 
     window.toggleUrlContainer = function(show) {
       var container = document.getElementById('urlInputContainer');
@@ -881,7 +1009,13 @@ export function getDashboardHtml(): string {
       })
       .then(function(res) { return res.json(); })
       .then(function(data) {
-        if (data.error) window.showToast('Error: ' + data.error);
+        if (data.error) {
+          window.showToast('Error: ' + data.error);
+        } else if (data.chatId) {
+          window.state.currentChatId = data.chatId;
+          history.pushState({ chatId: data.chatId }, '', '/chat/agent/' + data.chatId);
+          window.loadRecentChats();
+        }
       })
       .catch(function(err) { window.showToast('Failed to start run.'); });
     };
@@ -889,7 +1023,25 @@ export function getDashboardHtml(): string {
     function initApp() {
       try { window.loadModels(); } catch (e) {}
       try { window.initSSE(); } catch (e) {}
-      try { window.renderHistory(); } catch (e) {}
+      try { window.loadRecentChats(); } catch (e) {}
+
+      var path = window.location.pathname;
+      if (path.indexOf('/chat/agent/') !== -1) {
+        var chatId = path.split('/chat/agent/')[1].split('/')[0];
+        if (chatId) {
+          window.loadChatSession(chatId);
+        }
+      }
+
+      window.addEventListener('popstate', function() {
+        var p = window.location.pathname;
+        if (p.indexOf('/chat/agent/') !== -1) {
+          var id = p.split('/chat/agent/')[1].split('/')[0];
+          if (id) window.loadChatSession(id);
+        } else {
+          window.prepareNewTask();
+        }
+      });
 
       document.addEventListener('click', function(e) {
         var dropdown = document.getElementById('modelDropdown');
