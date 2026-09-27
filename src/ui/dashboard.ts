@@ -48,6 +48,35 @@ export function getDashboardHtml(): string {
     }
   </script>
   <style>
+    :root {
+      --bg-primary: #212121;
+      --bg-tertiary: #414141;
+      --bg-status-success: #1F4E25;
+      --theme-blue-text-on-background: #2C67C5;
+      --bg-secondary: #E8E8E8;
+      --theme-purple-background: #EDE5FC;
+      --bg-status-success-light: #DEF3E5;
+      --theme-blue-text-on-background-light: #E8F3FE;
+      --bg-tertiary-light: #F3F3F3;
+      --bg-secondary-surface: #F9F9F9;
+      --text-tertiary: #5D5D5D;
+      --theme-purple-text: #A67DF2;
+      --text-secondary: #CDCDCD;
+      --color-green-700: #2C6732;
+      --theme-purple-accent: #7849D1;
+      --color-green-600: #3A843F;
+      --accent-default: #8F8F8F;
+      --accent-muted: #AFAFAF;
+      --color-4: #1F4E94;
+      --color-20: #FFFFFF;
+      --radius-sm: 0px 10px 10px 0px;
+      --radius-md: 26843500px;
+      --radius-lg: 8px;
+      --radius-xl: 10px;
+      --radius-full: 16px;
+      --radius-6: 28px;
+    }
+
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(150, 150, 150, 0.2); border-radius: 9999px; }

@@ -325,6 +325,12 @@ docker run --rm -it \
 
 ---
 
+## 🎨 Design System
+
+BrowserAgent's Web Studio follows the token-driven **ChatGPT Design System** for all studio and web interfaces. See [docs/DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md) for full token tables, color palette, component density, typography, accessibility rules, and Definition of Done.
+
+---
+
 ## 📄 License
 
 MIT License. See [LICENSE](./LICENSE) for details.
