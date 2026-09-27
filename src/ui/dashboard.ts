@@ -67,6 +67,8 @@ export function getDashboardHtml(): string {
       --color-green-600: #3A843F;
       --accent-default: #8F8F8F;
       --accent-muted: #AFAFAF;
+      --color-coral: #FF6764;
+      --color-black-pure: #000000;
       --color-4: #1F4E94;
       --color-20: #FFFFFF;
       --radius-sm: 0px 10px 10px 0px;

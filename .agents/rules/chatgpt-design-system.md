@@ -1,15 +1,14 @@
 # Rule: ChatGPT Design System Guidelines
 
-Apply the following design system tokens, principles, and rules when building or modifying UI components, marketing surfaces, and web pages:
+Apply the following design system tokens, principles, and rules when building or modifying UI components, marketing surfaces, editorial blogs, and web pages:
 
 ## Design Principles
-- **Consistency over novelty** — reuse existing patterns before inventing new ones.
-- **Token-driven** — every visual decision references a token, not a magic number.
-- **Accessible by default** — compliance is a baseline, not a feature.
+- **Marketing / Studio**: Consistency over novelty, token-driven, accessible by default.
+- **Editorial / Blog**: Readability above all (optimised for sustained reading), content is the interface, minimal chrome.
 
 ## Colors & Tokens
 - `--bg-primary`: `#212121` (Dark Primary Background)
-- `--bg-tertiary`: `#414141` (Dark Surface/Secondary Background)
+- `--bg-tertiary`: `#414141` (Dark Surface/Card Background)
 - `--bg-secondary`: `#E8E8E8` (Light Surface)
 - `--bg-secondary-surface`: `#F9F9F9`
 - `--bg-tertiary-light`: `#F3F3F3`
@@ -19,6 +18,8 @@ Apply the following design system tokens, principles, and rules when building or
 - `--color-green-600`: `#3A843F` (Accent)
 - `--accent-default`: `#8F8F8F`
 - `--accent-muted`: `#AFAFAF`
+- `color-11`: `#FF6764` (Accent Coral / Alert)
+- `color-1`: `#000000` (Pure Dark Background)
 - `color-4`: `#1F4E94` (Border)
 - `color-20`: `#FFFFFF` (Light Text)
 - `--theme-purple-text`: `#A67DF2` / `#7849D1`
@@ -26,17 +27,14 @@ Apply the following design system tokens, principles, and rules when building or
 - `--theme-blue-text-on-background`: `#2C67C5` / `#E8F3FE`
 - `--bg-status-success`: `#1F4E25` / `#DEF3E5`
 
-## Typography
+## Typography Systems
 - **Font Stack**: `-apple-system-body, OpenAI Sans, Inter, system-ui, -apple-system, sans-serif`
-- `text-xs`: 12px (captions, metadata)
-- `text-sm`: 14px (labels, secondary text)
-- `text-base`: 16px (body text default)
-- `text-lg`: 18px (subheadings, emphasis)
-- `text-xl`: 24px (section headings)
-- Weights: 400 · 600
+- **Studio Scale**: 12px (`text-xs`), 14px (`text-sm`), 16px (`text-base`), 18px (`text-lg`), 24px (`text-xl`)
+- **Editorial / Reading Scale**: 14px (`text-xs`), 16px (`text-sm`), 18px (`text-base` body), 24px (`text-lg`)
+- **Weight Scale**: 400 · 500 · 600
 
 ## Spacing (Base unit: 4px)
-- `space-1` (2px), `space-2` (4px), `space-4` (6px), `space-6` (8px), `space-8` (12px), `space-10` (16px), `space-12` (24px), `space-13` (32px), `space-14` (64px)
+- `space-1` (2px), `space-2` (4px), `space-3` (6px), `space-4` (8px), `space-5` (10px), `space-6` (16px), `space-7` (22px), `space-8` (24px), `space-9` (82px), `space-10` (329px)
 
 ## Shapes & Radii
 - `radius-sm`: `0px 10px 10px 0px`
@@ -45,6 +43,10 @@ Apply the following design system tokens, principles, and rules when building or
 - `radius-xl`: `10px`
 - `radius-full`: `16px`
 - `radius-6`: `28px`
+
+## Writing Tone
+- Studio / Product: Concise, confident, implementation-focused.
+- Editorial / Blog: Informative, engaging, conversational (first person plural when appropriate).
 
 ## Component Quality Bar (Definition of Done)
 - All states documented and visually verified (hover, focus, disabled, loading, error, empty).
